@@ -9,8 +9,9 @@
 # - interpreters that run gh themselves (python3 -c "os.system('gh pr merge 1')",
 #   node -e, awk 'BEGIN{system("gh ...")}', perl -e);
 # - indirection through environment variables or files it doesn't read (for example
-#   GH_* settings, or a git alias in a config file it isn't pointed at, including a
-#   repo created earlier in the same command and then used with git -C);
+#   GH_* settings, or a git config file written with a file-editing tool, which can
+#   set command-running keys such as core.pager or core.fsmonitor even for built-in
+#   subcommands);
 # - a gh alias set before the hook was installed, a gh binary whose name is built by
 #   shell expansion, a wrapper not in RUNNERS, and API calls made without gh (curl).
 import json, os, re, shlex, subprocess, sys
@@ -88,8 +89,24 @@ def has_gh(s):
 # git runs an alias that starts with ! as a shell command, and some settings
 # (core.pager, core.editor, core.sshCommand...) run commands too. So block any
 # git -c alias.*, any -c or git config value that mentions gh, any git config that
-# writes an alias, and running an alias whose definition starts with !.
+# writes an alias, and running an alias whose definition starts with !. include.* and
+# includeIf.* pull in another config file, which can define aliases, so they count
+# as alias writes too.
 GIT_CONFIG_READS = {"--get", "--get-all", "--get-regexp", "--list", "-l", "--show-origin", "--name-only"}
+ALIAS_KEYS = ("alias.", "include.", "includeif.")
+_builtins = None
+
+def git_builtins():
+    """Subcommands git implements itself. git never lets an alias override these."""
+    global _builtins
+    if _builtins is None:
+        try:
+            out = subprocess.run(["git", "--list-cmds=builtins"], capture_output=True,
+                                 text=True, timeout=5)
+            _builtins = set(out.stdout.split()) if out.returncode == 0 else set()
+        except Exception:
+            _builtins = set()
+    return _builtins
 
 def check_git(seg, cwd):
     for i, t in enumerate(seg):
@@ -105,27 +122,27 @@ def check_git(seg, cwd):
             else:
                 j += 1
         for v in cvals:
-            if v.lower().startswith("alias.") or has_gh(v):
+            if v.lower().startswith(ALIAS_KEYS) or has_gh(v):
                 block("git -c with an alias or a gh command; run gh as its own command")
         if j >= len(args):
             continue
         sub, rest = args[j], args[j + 1:]
         if sub == "config":
             if not GIT_CONFIG_READS & set(rest) and any(
-                    t.lower().startswith("alias.") or has_gh(t) for t in rest):
-                block("git config that writes an alias or a gh command")
+                    t.lower().startswith(ALIAS_KEYS) or has_gh(t) for t in rest):
+                block("git config that writes an alias, an include, or a gh command")
             continue
         base = cwd if os.path.isdir(cwd) else None
         if cdir:
             base = os.path.join(base or ".", cdir)
-            # The -C directory may not exist yet (made earlier in the same command,
-            # for example by git worktree add). Look the alias up from its nearest
-            # existing parent: that still sees global, system and enclosing-repo
-            # aliases. A repo config written in the same command is a known limit.
-            while not os.path.isdir(base) and os.path.dirname(base) not in ("", base):
-                base = os.path.dirname(base)
             if not os.path.isdir(base):
-                base = cwd if os.path.isdir(cwd) else None
+                # The -C directory doesn't exist yet (for example, made earlier in the
+                # same command by git worktree add). Its config, and so its aliases,
+                # can't be read now. Allow only built-in subcommands, which no alias
+                # can override; block anything else.
+                if sub in git_builtins():
+                    continue
+                block("could not check whether a git command is a shell alias")
         try:
             out = subprocess.run(["git", "config", "--get", "alias." + sub], cwd=base,
                                  capture_output=True, text=True, timeout=5).stdout

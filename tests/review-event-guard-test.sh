@@ -205,12 +205,21 @@ check 2 'git kx'
 check 2 'env git km'
 check 2 'git -C . km'
 # A -C directory that doesn't exist yet (created earlier in the same command):
-# aliases are looked up from its nearest existing parent, so a shell alias is
-# still caught and ordinary commands are allowed.
-check_blocked_because 'git km is a shell alias' 'git -C does-not-exist km'
-check_blocked_because 'git km is a shell alias' 'mkdir -p new-dir && git -C new-dir/deeper km'
+# its config can't be read, so only built-in subcommands are allowed there.
+NOCHECK='could not check whether a git command is a shell alias'
 check 0 'git worktree add new-wt HEAD && git -C new-wt status'
-check 0 'git -C does-not-exist/deeper kco main'
+check 0 'git -C does-not-exist/deeper log --oneline -1'
+check_blocked_because "$NOCHECK" 'git -C does-not-exist km'
+check_blocked_because "$NOCHECK" 'mkdir -p new-dir && git -C new-dir/deeper km'
+check_blocked_because "$NOCHECK" 'git -C does-not-exist/deeper kco main'
+# kz is defined nowhere the hook can see, only in an evil.cfg the agent could write.
+check_blocked_because "$NOCHECK" 'git init x && cp evil.cfg x/.git/config && git -C x kz'
+check_blocked_because 'git config that writes an alias, an include' 'git init x && git -C x config include.path ../evil.cfg && git -C x kz'
+# include.* and includeIf.* pull in another config file, which can define aliases.
+check_blocked_because 'git config that writes an alias, an include' 'git config include.path ../evil.cfg'
+check_blocked_because 'git config that writes an alias, an include' 'git config includeIf.gitdir:~/x/.path ../evil.cfg'
+check_blocked_because 'git -c with an alias' 'git -c include.path=../evil.cfg km'
+check 0 'git config --get include.path'
 check 0 'git kco main'
 check 0 'git config --get alias.km'
 check 0 'git config user.name Test'
