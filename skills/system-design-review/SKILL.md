@@ -26,7 +26,7 @@ For a review, name each principle a change breaks, with the scenario that breaks
 - One business operation is one transaction: the order update, its audit row, its ledger entry and the balance change commit or roll back together.
 - Model status as allowed transitions. Correct mistakes by appending a compensating record (a refund, a reversal), not by rewriting history.
 - Retries are idempotent: the same request key with the same payload returns the first result, and with a different payload it is rejected.
-- When a refund returns something that expires (store credit, a voucher), put it into a new linked lot with its own expiry. Reviving a lot whose expiry has passed silently destroys the refund.
+- A compensating record carries its own validity rules. If the original has expired or been closed, link the correction to it rather than reopening it: a reversed subscription renewal starts its own period instead of reactivating the lapsed one.
 - Background writers of a cache or local copy compare a version or timestamp before replacing a row, or a slow sync brings back a record that was just deleted.
 - A resumable draft saves the server ids it has already created, so finishing after a reload doesn't create a duplicate order.
 - Take sync cursors from data the server returned, not from the client's clock.
@@ -53,7 +53,7 @@ For a review, name each principle a change breaks, with the scenario that breaks
 - Use ordered migrations with a single runner. Each starts with a read-only preflight that names the offending table and rows, and it stops instead of guessing when data is ambiguous.
 - Rebuild tables atomically, keeping ids, indexes, constraints and foreign-key behavior. Backfill and verify the new shape before dropping the old one. Make interrupted runs safe to resume.
 - All branches draw migration version ids from one sequence. Before merging, look for the same id on other open branches, and leave already-applied ids alone forever.
-- Run every migration, starting from the oldest version you support and again from one in the middle, twice each, then diff the resulting schema against the models.
+- Run the full migration chain from the oldest version you support and from one in the middle, then diff the resulting schema against the models. Run it again and confirm the second run changes nothing, and interrupt one migration partway to confirm it resumes cleanly.
 - Backfill with set-based statements, not a query per row. Check that the production database version supports every feature used.
 - Change storage models in stages: introduce the new model, dual-write, backfill and check, move readers over, and only then delete the old model.
 
@@ -74,7 +74,7 @@ For a review, name each principle a change breaks, with the scenario that breaks
 - A read for one record is scoped to that record. Don't compute an aggregate for a whole account and filter it afterwards. Avoid joins with no equality key.
 - Keep the database's query-planner statistics fresh, and measure the heavy queries before and after a change.
 - Treat "now" as an input. A value recomputed at read time and checked against a stored one must not change just because the business day rolled over or a release shipped.
-- Rate limits keep a counter per user, written transactionally. The counters expire, and they're charged for the work actually returned.
+- Rate limits keep a counter per user, written transactionally. The counters expire, and each request adds the work it actually did or returned (rows, tokens, bytes), not just one, so a single expensive call can't hide under a request-count limit.
 - Before optimizing cost, name what actually sets the floor and measure the expected gain. If you can't measure it yet, add the measurement first.
 - Telemetry is opt-in, allowlisted and pseudonymous, carries no user content, and never fails the request.
 - In tests, assert the committed state after a fresh read, including partial, repeated, reversed and failed operations.
