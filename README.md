@@ -18,7 +18,7 @@ Skills live once in `skills/`; `.claude/skills`, `.agents/skills` and `.github/s
 
 ## Quick start (about 5 minutes)
 
-Adopt the skills and the guard in another Git repository. You need `git`, `bash`, `python3` and `jq`.
+Adopt the skills and the guard in another Git repository. You need `git`, `bash`, `python3`, `jq`, and the GitHub CLI `gh`, signed in (`gh auth status`) with access to the repository.
 
 1. Clone this repo next to yours and go to your repo's root:
 
@@ -26,11 +26,11 @@ Adopt the skills and the guard in another Git repository. You need `git`, `bash`
    git clone https://github.com/ykaitao/KT-coding-agent.git ../KT-coding-agent
    ```
 
-2. Copy the files:
+2. Copy the files. If your repo already has a `skills/` folder, this copies only the three skill folders, skips any that already exist, and leaves your `skills/README.md` alone. In that case, add the three entries from [`skills/README.md`](skills/README.md) to your own `skills/README.md` under `## Skills`:
 
    ```bash
    mkdir -p docs .claude/hooks tests
-   cp -R ../KT-coding-agent/skills .
+   if [ -e skills ]; then for s in pr-review-loop pr-inline-review pr-address-review; do if [ -e skills/$s ]; then echo "skills/$s exists, skipped"; else cp -R ../KT-coding-agent/skills/$s skills/; fi; done; echo "skills/ already existed: add the three skills to skills/README.md under ## Skills"; else cp -R ../KT-coding-agent/skills .; fi
    cp ../KT-coding-agent/docs/WAY_OF_WORKING.md docs/
    cp ../KT-coding-agent/.claude/hooks/review-event-guard.py .claude/hooks/
    cp ../KT-coding-agent/tests/review-event-guard-test.sh ../KT-coding-agent/tests/skills-check.sh tests/
@@ -61,9 +61,9 @@ Adopt the skills and the guard in another Git repository. You need `git`, `bash`
    EOF
    ```
 
-   Add the permission rules for each role as described in [Permissions](docs/WAY_OF_WORKING.md#permissions).
+5. Add the `allow` rules for each role from [Permissions](docs/WAY_OF_WORKING.md#permissions) to the same file. Without them, every review post and reply asks for approval, so the loop can't run unattended. `.claude/settings.local.json` isn't committed: it belongs to you and to this checkout, so repeat steps 4 and 5 on each machine and in each new worktree.
 
-5. Run both checks. Every line should start with `ok`, and each script exits 0:
+6. Run both checks. Every line should start with `ok`, and each script exits 0:
 
    ```bash
    bash tests/review-event-guard-test.sh
@@ -73,7 +73,9 @@ Adopt the skills and the guard in another Git repository. You need `git`, `bash`
    bash tests/skills-check.sh
    ```
 
-6. Open a PR, start a Claude Code session as the manager, and ask it to "run the review/implement loop on PR N".
+7. Open a PR, start a Claude Code session as the manager, and ask it to "run the review/implement loop on PR N".
+
+The review-event guard is a Claude Code hook, so it runs only in Claude Code. Codex and Copilot sessions get the skills (discovery unverified) but no guard: nothing stops them from approving, so give them read-only or comment-only GitHub permissions.
 
 The full adoption notes, including turning on **Automatically delete head branches** on GitHub, are in [Adopting this in another repository](docs/WAY_OF_WORKING.md#adopting-this-in-another-repository).
 
