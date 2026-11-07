@@ -19,6 +19,11 @@ printf '%s\n' '{"query": "\u006dutation { addPullRequestReview(input:{pullReques
 printf 'mutation { addPullRequestReview(input:{pullRequestId:"X", body:"event:COMMENT", event#x\n:APPROVE}) { clientMutationId } }\n' > "$tmp/decoy.graphql"
 
 fail=0
+# git aliases are looked up by the hook: use a scratch git config, never the user's.
+export GIT_CONFIG_GLOBAL="$tmp/gitconfig" GIT_CONFIG_NOSYSTEM=1
+git config --global alias.km '!gh pr merge 1'
+git config --global alias.kx '!echo hi'
+git config --global alias.kco checkout
 check() { # expected_exit command
   local expected=$1 cmd=$2 got
   printf '{"cwd":%s,"tool_input":{"command":%s}}' \
@@ -179,6 +184,21 @@ check 2 'sudo gh pr merge 1'
 check 2 'exec gh pr merge 1'
 check 2 'nohup gh pr review 1 --approve'
 check 2 "eval 'gh pr view 1'"
+# git aliases and command settings that can run gh.
+check 2 "git -c alias.m='!gh pr merge 1' m"
+check 2 "git config alias.m '!gh pr merge 1'"
+check 2 "git -c alias.co=checkout co main"
+check 2 "git config --global alias.co checkout"
+check 2 "git -c core.pager='gh pr merge 1' log"
+check 2 "git config core.editor 'gh pr merge 1'"
+check 2 'git km'
+check 2 'git kx'
+check 2 'env git km'
+check 2 'git -C . km'
+check 0 'git kco main'
+check 0 'git config --get alias.km'
+check 0 'git config user.name Test'
+check 0 'git log --oneline -1'
 # Mentioning graphql outside gh api is fine.
 check 0 'grep -rn graphql docs'
 
