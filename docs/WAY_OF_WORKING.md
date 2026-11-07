@@ -43,11 +43,49 @@ For the loop to run with the owner talking only to the manager, give each sessio
 
 Keep these blocked unless the owner approves each one: approving PRs, requesting changes, merging, pushing to the default branch, and deleting anything on GitHub.
 
-**A path-based allow rule can't keep approving blocked.** An approval is the same `POST .../pulls/<n>/reviews` call as a comment-only review; only the `event` field differs (`COMMENT`, `APPROVE` or `REQUEST_CHANGES`). So a rule that allows posting reviews also allows approving and requesting changes. To guard against that, either:
-- add an auto-mode classifier rule that allows review posts only with `event` `COMMENT`, or
-- add a PreToolUse hook that rejects any review post whose `event` is not `COMMENT`.
+**A path-based allow rule can't keep approving blocked.** An approval is the same `POST .../pulls/<n>/reviews` call as a comment-only review; only the `event` field differs (`COMMENT`, `APPROVE` or `REQUEST_CHANGES`). So a rule that allows posting reviews also allows approving and requesting changes.
 
-Without one of these, the owner accepts that review-posting permission also allows approving.
+**The guard is a PreToolUse hook** that rejects any review post whose `event` isn't `COMMENT`. It has to find `event` where it really is: in the `--input` file or in `-f`/`-F event=` arguments.
+
+An auto-mode classifier rule doesn't replace the hook. A command that matches a `permissions.allow` rule runs without reaching the classifier, so once the review allow rule exists, the classifier never judges review posts. Without an allow rule, every post costs a classifier call that may be denied, and with `--input <file>` the `event` isn't in the command text the classifier sees. Without the hook, the owner accepts that review-posting permission also allows approving.
+
+Example hook, saved as `.claude/hooks/review-event-guard.py`. It blocks writes to `.../pulls/<n>/reviews...` unless every `event` it can find is `COMMENT`, and it also blocks when it can't read the event (no event, or `--input -`). Reads such as `GET .../reviews` pass.
+
+```python
+#!/usr/bin/env python3
+# PreToolUse hook: block any GitHub PR review post whose event is not COMMENT.
+import json, os, re, shlex, sys
+
+data = json.load(sys.stdin)
+cmd = data.get("tool_input", {}).get("command", "")
+if not re.search(r"pulls/\d+/reviews\b", cmd):
+    sys.exit(0)
+try:
+    tokens = shlex.split(cmd)
+except ValueError:
+    tokens = cmd.split()
+
+writes, events = False, []
+for i, t in enumerate(tokens):
+    nxt = tokens[i + 1] if i + 1 < len(tokens) else ""
+    if t in ("-X", "--method") and nxt.upper() != "GET":
+        writes = True
+    if t in ("-f", "-F", "--field", "--raw-field"):
+        writes = True
+        if nxt.startswith("event="):
+            events.append(nxt[len("event="):])
+    if t == "--input":
+        writes = True
+        try:
+            path = os.path.join(data.get("cwd", "."), nxt)
+            events.append(json.load(open(path)).get("event"))
+        except Exception:
+            events.append(None)  # stdin or unreadable file: can't tell
+
+if writes and (not events or any(e != "COMMENT" for e in events)):
+    print("Blocked: PR reviews may only be posted with event COMMENT.", file=sys.stderr)
+    sys.exit(2)
+```
 
 Example `.claude/settings.local.json` (replace `<owner>/<repo>`; check the keys against your Claude Code version):
 
@@ -59,15 +97,26 @@ Example `.claude/settings.local.json` (replace `<owner>/<repo>`; check the keys 
       "Bash(gh api repos/<owner>/<repo>/pulls/*/comments/*/replies *)"
     ]
   },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          { "type": "command", "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/review-event-guard.py\"" }
+        ]
+      }
+    ]
+  },
   "autoMode": {
     "allow": [
+      "$defaults",
       "Posting a PR review with gh api is allowed only when its event is COMMENT; never APPROVE or REQUEST_CHANGES."
     ]
   }
 }
 ```
 
-In practice, put the review rule only in the review session's settings and the replies rule only in the implement session's settings. Pushing to feature branches needs its own rule.
+`.claude/settings.local.json` applies to everyone working in that folder. To give review only the review rule and implement only the replies rule, run each role in its own worktree, each with its own `.claude/settings.local.json`. If the sessions share one folder, both rules apply to both sessions. Pushing to feature branches needs its own rule.
 
 ## Skills across providers
 
