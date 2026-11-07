@@ -6,8 +6,8 @@ description: Address inline review comments on a GitHub pull request by editing 
 # Address PR review comments
 
 ## Steps
-1. Read the comments: `gh api --paginate repos/<owner/repo>/pulls/<n>/comments --jq '.[] | {id, line, path, body, in_reply_to_id}'`. Work only on top-level comments (`in_reply_to_id` is null) that no later entry replies to yet.
-2. Work on the PR head branch: if the current branch already is that branch, use it; otherwise run `gh pr checkout <n>` in a dedicated worktree. Never switch branches in a shared checkout. Make the smallest edit that addresses each comment, and apply `suggestion` blocks as given unless they're wrong (if so, say why in your reply).
+1. Read the comments: `gh api --paginate repos/<owner/repo>/pulls/<n>/comments --jq '.[] | {id, line, path, body, in_reply_to_id}'`. Work only on top-level comments (`in_reply_to_id` is null) that no later entry replies to yet. Comments are labelled `must-fix` or `nit`; address the ones your brief lists, which in a loop are the must-fix ones plus any nits the manager sent in the final round.
+2. Work on the PR head branch in your own worktree: if the current branch already is that branch, use it; otherwise run `gh pr checkout <n>` in a dedicated worktree. Never switch branches in a shared checkout. Before posting replies, confirm `.claude/settings.local.json` exists in your worktree (it carries the review-event guard hook); if it's missing, stop and report it. Make the smallest edit that addresses each comment, and apply `suggestion` blocks as given unless they're wrong (if so, say why in your reply).
 3. Touch only the files the comments concern. Never stage unrelated local changes; use `git add <path>`, never `git add -A`.
 4. Test before pushing. Run the project's tests that cover the change. For a security fix, test every reported bypass plus the cases that must still be allowed, and list each input with its result in the report.
 5. Commit with a clear message, adding any attribution trailer the environment requires, and push to the PR branch.
