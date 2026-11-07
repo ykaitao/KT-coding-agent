@@ -37,11 +37,37 @@ The full procedure is the [`pr-review-loop`](../skills/pr-review-loop/SKILL.md) 
 
 ## Permissions
 
-For the loop to run with the owner talking only to the manager, every session must be allowed to:
-- post comment-only PR reviews, and replies to review comments (`gh api` POST to `repos/<owner>/<repo>/pulls/...`);
-- push to feature branches.
+For the loop to run with the owner talking only to the manager, give each session only what its role needs:
+- **Review:** post PR reviews (`gh api` POST to `repos/<owner>/<repo>/pulls/<n>/reviews`).
+- **Implement:** push to feature branches, and reply to review comments (`gh api` POST to `repos/<owner>/<repo>/pulls/<n>/comments/<id>/replies`).
 
-Keep these blocked unless the owner approves each one: approving PRs, merging, pushing to the default branch, and deleting anything on GitHub.
+Keep these blocked unless the owner approves each one: approving PRs, requesting changes, merging, pushing to the default branch, and deleting anything on GitHub.
+
+**A path-based allow rule can't keep approving blocked.** An approval is the same `POST .../pulls/<n>/reviews` call as a comment-only review; only the `event` field differs (`COMMENT`, `APPROVE` or `REQUEST_CHANGES`). So a rule that allows posting reviews also allows approving and requesting changes. To guard against that, either:
+- add an auto-mode classifier rule that allows review posts only with `event` `COMMENT`, or
+- add a PreToolUse hook that rejects any review post whose `event` is not `COMMENT`.
+
+Without one of these, the owner accepts that review-posting permission also allows approving.
+
+Example `.claude/settings.local.json` (replace `<owner>/<repo>`; check the keys against your Claude Code version):
+
+```json
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh api repos/<owner>/<repo>/pulls/*/reviews *)",
+      "Bash(gh api repos/<owner>/<repo>/pulls/*/comments/*/replies *)"
+    ]
+  },
+  "autoMode": {
+    "allow": [
+      "Posting a PR review with gh api is allowed only when its event is COMMENT; never APPROVE or REQUEST_CHANGES."
+    ]
+  }
+}
+```
+
+In practice, put the review rule only in the review session's settings and the replies rule only in the implement session's settings. Pushing to feature branches needs its own rule.
 
 ## Skills across providers
 
