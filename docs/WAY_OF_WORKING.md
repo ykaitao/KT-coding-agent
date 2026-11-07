@@ -49,12 +49,30 @@ Keep these blocked unless the owner approves each one: approving PRs, requesting
 
 An auto-mode classifier rule doesn't replace the hook. A command that matches a `permissions.allow` rule runs without reaching the classifier, so once the review allow rule exists, the classifier never judges review posts. Without an allow rule, every post costs a classifier call that may be denied, and with `--input <file>` the `event` isn't in the command text the classifier sees. Without the hook, the owner accepts that review-posting permission also allows approving.
 
-The hook ships in this repo as [`.claude/hooks/review-event-guard.py`](../.claude/hooks/review-event-guard.py), with tests in [`tests/review-event-guard-test.sh`](../tests/review-event-guard-test.sh) (`bash tests/review-event-guard-test.sh`). Copy both when adopting this process, and rerun the tests after changing the hook. It fails closed. For any command that touches `pulls/<n>/reviews`, it first splits `--flag=value` and `-fVALUE`/`-FVALUE`/`-XVALUE` into flag and value. A plain read (no flags other than `--paginate`, `--jq` and similar) passes. Any other use is blocked unless the hook finds at least one `event` and every `event` it finds is `COMMENT`. It reads `event` from `-f`/`-F`/`--field`/`--raw-field event=...`, from `-F event=@file`, and from the `--input` file. It also blocks `gh pr review` unless it runs with `--comment` and without `--approve` or `--request-changes`. It's a guardrail against mistakes, not a sandbox: a command built to hide the endpoint (for example by assembling the path from shell variables) can still get past it.
+The hook ships in this repo as [`.claude/hooks/review-event-guard.py`](../.claude/hooks/review-event-guard.py), with tests in [`tests/review-event-guard-test.sh`](../tests/review-event-guard-test.sh) (`bash tests/review-event-guard-test.sh`). Copy both when adopting this process, and rerun the tests after changing the hook. It fails closed when it can't find or read a review's `event`. For any command that touches `pulls/<n>/reviews`, it first splits `--flag=value` and `-fVALUE`/`-FVALUE`/`-XVALUE` into flag and value. A plain read (no flags other than `--paginate`, `--jq` and similar) passes. Any other use is blocked unless the hook finds at least one `event` and every `event` it finds is `COMMENT`. It reads `event` from `-f`/`-F`/`--field`/`--raw-field event=...`, from `-F event=@file`, and from the `--input` file. It also blocks `gh pr review` unless it runs with `--comment` and without `--approve` or `--request-changes`. It's a guardrail against mistakes, not a sandbox: a command built to hide the endpoint (for example by assembling the path from shell variables) can still get past it.
 
 
 Pass `--input` (and `-F event=@...`) a literal absolute or relative path. The hook sees the command text before the shell runs it, so shell variables and `~` aren't expanded. A path like `"$S/review.json"` or `~/review.json` can't be opened, and the hook blocks the post even when the event is COMMENT.
 
 Write the JSON in one step and post it in a separate command. The hook checks the `--input` file before any part of the command runs, so in `printf ... > rv.json && gh api ... --input rv.json` it would judge the file's old contents. The hook therefore blocks any review write whose command contains a shell operator (`&&`, `&`, `||`, `;`, `|`, `<`, `>`, `$(`, a backtick or a newline). That also covers those characters inside `-f body=...`, so put review text in the `--input` file.
+
+**What the tests prove.** Each claim above links to the cases in [`tests/review-event-guard-test.sh`](../tests/review-event-guard-test.sh) that check it, as of master:
+
+| Claim | Test cases |
+| --- | --- |
+| Comment-only reviews and plain reads pass | [lines 25–32](../tests/review-event-guard-test.sh#L25-L32) |
+| Approvals and request-changes are blocked in every flag form (`--input`, `-f`, `-fevent=`, `--raw-field=`, `-F event=@file`) and through `gh pr review` | [lines 34–47](../tests/review-event-guard-test.sh#L34-L47) |
+| Fails closed when it can't find or read the `event`: a missing `@file`, or a write with no event | [lines 42–44](../tests/review-event-guard-test.sh#L42-L44) |
+| Review writes combined with other commands are blocked (`&&`, `&`, `;`, `\|`, `$(`, a newline, `\|\|`, a backtick, `<`) | [lines 49–57](../tests/review-event-guard-test.sh#L49-L57) |
+
+Not on master yet: these arrive with PR 26 and its tests, once it merges.
+- Malformed hook input is blocked instead of exiting 1. On master it exits 1, which doesn't block.
+- GraphQL is denied outright.
+- `gh` subcommands are allowlisted.
+- A plain `gh pr merge` asks the owner.
+- A wrapped or quoted `gh` is blocked.
+
+The line links will need updating when that PR changes the test file.
 
 Example `.claude/settings.local.json` (replace `<owner>/<repo>`; check the keys against your Claude Code version):
 
@@ -86,6 +104,15 @@ Example `.claude/settings.local.json` (replace `<owner>/<repo>`; check the keys 
 ```
 
 `.claude/settings.local.json` applies to everyone working in that folder. To give review only the review rule and implement only the replies rule, run each role in its own worktree, each with its own `.claude/settings.local.json`. If the sessions share one folder, both rules apply to both sessions. Pushing to feature branches needs its own rule.
+
+## When skills conflict
+
+A user's own skill can cover the same task as one of this repo's skills. In Claude Code, a personal skill with the same name silently replaces the repo's copy (personal beats project); in Codex, both copies appear side by side; Copilot's rule isn't documented (issue #32). When they conflict:
+- an explicit instruction from the user or owner wins first;
+- then this repo's skills and docs, for work in this repo;
+- then the more specific skill.
+
+No skill relaxes the safety rules: comment-only reviews, and no merge without the owner. The agent names the conflict in its report instead of choosing silently, and asks the owner if it's unclear.
 
 ## Skills across providers
 
