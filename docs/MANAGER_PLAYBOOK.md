@@ -1,6 +1,6 @@
 # Manager playbook
 
-Practical lessons for whoever acts as the manager in the review/implement loop, whether a person or an agent. The process itself is in [`WAY_OF_WORKING.md`](WAY_OF_WORKING.md) and the loop steps are in [`pr-review-loop`](../skills/pr-review-loop/SKILL.md). This page doesn't repeat them; it covers what went wrong while running them and what the manager does about it. PR numbers are cited as evidence.
+Practical lessons for whoever acts as the manager in the review/implement loop, whether a person or an agent. The process itself is in [`WAY_OF_WORKING.md`](WAY_OF_WORKING.md) and the loop steps are in [`pr-review-loop`](../skills/pr-review-loop/SKILL.md). This page doesn't repeat them; it covers what went wrong while running them and what the manager does about it. PR numbers are cited as evidence where GitHub shows it; other lessons are marked "(manager's account)".
 
 ## 1. Briefs
 
@@ -28,8 +28,8 @@ For security claims, rerun the tests and probes yourself; don't take "blocked" o
 
 Evidence from this repo:
 
-- **PR 1:** a reviewer reported deleting comments it never deleted. That is why "trust only what's verified" is a principle in [`WAY_OF_WORKING.md`](WAY_OF_WORKING.md).
-- **PR 9:** the manager's own claim about the guard hook was wrong. The draft said the hook blocks any command that combines a reviews request with other commands. The reviewer fed the hook real inputs and showed that chains whose parts use only read flags get through. The manager is not exempt from verification.
+- **PR 1** (manager's account; not visible in the PR's GitHub history): a reviewer reported deleting comments it never deleted. That is why "trust only what's verified" is a principle in [`WAY_OF_WORKING.md`](WAY_OF_WORKING.md).
+- **PR 9:** a claim about the guard hook in the PR's text was wrong; that it was the manager's own claim is the manager's account. The draft said the hook blocks any command that combines a reviews request with other commands. The reviewer fed the hook real inputs and showed that chains whose parts use only read flags get through. The manager is not exempt from verification.
 
 ## 3. Parallel pairs
 
@@ -38,7 +38,7 @@ Running several PRs at once is covered in "Parallel pairs" in [`pr-review-loop`]
 - **Split work by files.** Pick tasks that touch different files, and say so in each brief. PR 7 (CI and a loop-skill line) ran next to PR 8 (the skills check and `skills/README.md`) without conflicts.
 - **One worktree per implementer.** Each implement session gets its own worktree and branch. Review sessions only read through `gh`, so they share the main checkout.
 - **Copy local settings into new worktrees.** `.claude/settings.local.json` is untracked, so a new worktree starts without its allow rules and without the review-event guard (PR 9).
-- **Capacity is limited.** The real limits are your own attention, since every report needs verifying, and disk space: a session failed to start with 4.3 GB free. Check `df -h` before starting another pair.
+- **Capacity is limited.** The real limits are your own attention, since every report needs verifying, and disk space: a session failed to start with 4.3 GB free (manager's account). Check `df -h` before starting another pair.
 - **Clean up after each merge.** Remove the worktree, delete the local branch, and prune. The commands are under "Finish" in `pr-review-loop`.
 
 ## 4. Standing preferences from the owner
@@ -49,7 +49,7 @@ These began as the manager's private memory: notes one agent kept across its own
 - **Delegated work runs in visible sessions.** Reviews and implementations run in sessions the owner can open and watch, not in hidden subagents.
 - **Keep pairs busy with non-overlapping work.** When a pair finishes, give it the next task that doesn't touch files another pair is working on.
 - **Rename sessions to "handle: task".** For example "review1: PR 8 skills check", so the session list shows who is doing what.
-- **Clean up after each merge.** Remove worktrees and local branches as soon as the PR merges.
+- **Clean up after each merge.** See "Clean up after each merge" in section 3.
 - **Turn every round's lessons into skill fixes.** After each round, judge how the agents did. Fix the skill or the brief through a PR, as PR 6 and PR 9 did.
 
 ## 5. When blocked
@@ -70,8 +70,8 @@ The manager **may not**:
 
 | Slip | Fix |
 | --- | --- |
-| An agent forgets to fetch before branching, so its branch starts from a stale `master`. | Put "run `git fetch`, then branch from `origin/master`" in every brief, and check the PR's base commit when it opens. |
-| A reviewer drops a concern from the brief, and the review comes back clean on everything else. | Compare the review against the brief's list of concerns before you accept it. If one is missing, send it back. |
+| An agent forgets to fetch before branching, so its branch starts from a stale `master` (manager's account). | Put "run `git fetch`, then branch from `origin/master`" in every brief, and check the PR's base commit when it opens. |
+| A reviewer drops a concern from the brief, and the review comes back clean on everything else (manager's account). | Compare the review against the brief's list of concerns before you accept it. If one is missing, send it back. |
 | A test passes for the wrong reason. | Prove the test with a mutation: disable the check it targets and confirm the test fails. On PR 6, two hook test cases still passed with the operator check disabled; the replacements fail without it. |
-| A PR that predates CI never ran the new checks. | Update the branch from `master` (GitHub's "Update branch", or merge `master` in) so CI runs on its head. PR 8 was updated this way after PR 7 added CI. Re-read the head SHA afterwards, because it changes. |
+| A PR that predates CI never ran the new checks. | Update the branch from `master` (`gh pr update-branch`, GitHub's "Update branch", or merge `master` in) before the last review round, so CI runs on its head. PR 8 was updated this way after PR 7 added CI. Re-read the head SHA afterwards because it changes, have the reviewer look at the new head, and tell implement to pull before its next push. See "Finish" in `pr-review-loop`. |
 | A shell command that only mentions a reviews endpoint is blocked by the guard hook. | Use a file-editing tool for docs edits, and run each `gh api` read of reviews as its own command (see the Rules in `pr-review-loop`). |
