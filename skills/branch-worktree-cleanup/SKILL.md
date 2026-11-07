@@ -28,7 +28,7 @@ Audit the repository the user named or the repository in the current working dir
    ```bash
    df -k "$(git rev-parse --show-toplevel)" | tail -1          # free space on the repository's volume
    git count-objects -v | grep -E '^size(-pack)?:'             # object store: loose KB and pack KB
-   git worktree list --porcelain | awk '/^worktree /{print $2}' | while read -r w; do du -sk "$w"; done   # per-worktree KB, ignored files (node_modules, venv, dist, databases) included
+   git worktree list --porcelain | sed -n 's/^worktree //p' | while IFS= read -r w; do du -sk "$w"; done   # per-worktree KB, ignored files (node_modules, venv, dist, databases) included
    ```
 
 ### 2. Inventory branches and worktrees
