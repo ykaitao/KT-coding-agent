@@ -75,7 +75,7 @@ Adopt the skills and the guard in another Git repository. You need `git`, `bash`
 
 7. Open a PR, start a Claude Code session as the manager, and ask it to "run the review/implement loop on PR N".
 
-The review-event guard is a Claude Code hook, so it runs only in Claude Code. Codex and Copilot sessions get the skills (discovery unverified) but no guard: nothing stops them from approving, so give them read-only or comment-only GitHub permissions.
+The review-event guard is a Claude Code hook, so it runs only in Claude Code. Codex and Copilot sessions get the skills (discovery unverified) but no guard, and GitHub has no permission that allows review comments but not approvals. Either give them read-only access and have the manager post their reviews, or treat comment-only as a working agreement: a human checks their reviews, and only the owner decides to merge.
 
 The full adoption notes, including turning on **Automatically delete head branches** on GitHub, are in [Adopting this in another repository](docs/WAY_OF_WORKING.md#adopting-this-in-another-repository).
 
