@@ -8,6 +8,8 @@
 # Run from anywhere: bash tests/skills-check.sh
 # Private terms: one per line in $SKILLS_PRIVATE_TERMS
 # (default ~/.config/kt-coding-agent/private-terms.txt). Never commit that file.
+# CI runs this script; the private-terms check only runs where that file exists.
+# Files under skills/ that are not UTF-8 text fail, since they can't be scanned.
 set -u
 
 root="$(cd "$(dirname "$0")/.." && pwd -P)"
@@ -103,14 +105,19 @@ import os, re, sys
 skills_dir, terms_file = sys.argv[1], sys.argv[2]
 this_repo = "ykaitao/kt-coding-agent"
 placeholders = {"owner/repo", "<owner/repo>"}
+# First path segments of github.com pages that are not repositories.
+github_pages = {"settings", "features", "orgs", "apps", "marketplace", "login",
+                "notifications", "sponsors", "topics", "collections", "about", "pricing"}
 
 files = []
+not_utf8 = []
 for base, _, names in os.walk(skills_dir):
     for name in sorted(names):
         path = os.path.join(base, name)
         try:
             text = open(path, encoding="utf-8").read()
         except (UnicodeDecodeError, OSError):
+            not_utf8.append(os.path.relpath(path, os.path.dirname(skills_dir)))
             continue
         files.append((os.path.relpath(path, os.path.dirname(skills_dir)), text))
 
@@ -126,15 +133,22 @@ def scan(label, pattern, keep=lambda m: True, flags=0):
     else:
         print("ok   no %s in skills/" % label)
 
-scan("home paths", r"/Users/[A-Za-z]|/home/[A-Za-z]|[A-Za-z]:\\Users\\|~/[A-Za-z.]")
-scan("email addresses", r"[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}")
+if not_utf8:
+    print("FAIL files that cannot be scanned (not UTF-8 text): %s" % "; ".join(not_utf8[:5]))
+else:
+    print("ok   every file under skills/ is UTF-8 text")
+
+scan("home paths", r"(?<![\w.])/Users/[A-Za-z]|(?<![\w.])/home/[A-Za-z]|[A-Za-z]:\\Users\\|~/[A-Za-z.]")
+scan("email addresses", r"[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}",
+     keep=lambda m: not re.search(r"@(example\.(com|org|net)|github\.com)$", m.group(0), re.I))
 scan("likely tokens",
-     r"gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9_-]{20,}"
+     r"\bgh[pousr]_[A-Za-z0-9]{20,}|\bgithub_pat_[A-Za-z0-9_]{20,}|(?<![A-Za-z0-9-])sk-[A-Za-z0-9_-]{20,}"
      r"|AKIA[0-9A-Z]{16}|xox[abprs]-[A-Za-z0-9-]{10,}|-----BEGIN [A-Z ]*PRIVATE KEY")
 scan("cross-repo issue/PR references", r"(?<![\w./-])([\w.-]+/[\w.-]+)#\d+",
      keep=lambda m: m.group(1).lower() not in placeholders | {this_repo})
 scan("github.com URLs to other repos", r"github\.com/([\w.-]+/[\w.-]+)",
-     keep=lambda m: m.group(1).lower().removesuffix(".git") not in placeholders | {this_repo},
+     keep=lambda m: m.group(1).split("/")[0].lower() not in github_pages
+                   and m.group(1).lower().removesuffix(".git") not in placeholders | {this_repo},
      flags=re.I)
 
 if os.path.isfile(terms_file):
