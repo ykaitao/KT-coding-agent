@@ -62,7 +62,7 @@ Write the JSON in one step and post it in a separate command. The hook checks th
 | --- | --- |
 | Comment-only reviews and plain reads pass | [lines 25–32](../tests/review-event-guard-test.sh#L25-L32) |
 | Approvals and request-changes are blocked in every flag form (`--input`, `-f`, `-fevent=`, `--raw-field=`, `-F event=@file`) and through `gh pr review` | [lines 34–47](../tests/review-event-guard-test.sh#L34-L47) |
-| Fails closed when it can't find or read the `event`: a missing `@file`, or a write with no event | [lines 42–44](../tests/review-event-guard-test.sh#L42-L44) |
+| Fails closed on a missing `-F event=@file`, and on a write with no event | [lines 42–44](../tests/review-event-guard-test.sh#L42-L44) |
 | Review writes combined with other commands are blocked (`&&`, `&`, `;`, `\|`, `$(`, a newline, `\|\|`, a backtick, `<`) | [lines 49–57](../tests/review-event-guard-test.sh#L49-L57) |
 
 Not on master yet: these arrive with PR 26 and its tests, once it merges.
@@ -113,6 +113,8 @@ A user's own skill can cover the same task as one of this repo's skills. In Clau
 - then the more specific skill.
 
 No skill relaxes the safety rules: comment-only reviews, and no merge without the owner. The agent names the conflict in its report instead of choosing silently, and asks the owner if it's unclear.
+
+In Claude Code the agent only ever loads one copy, so it can't see the conflict. Before using one of this repo's skills, it checks whether `~/.claude/skills/<name>/` exists. If it does, it reads this repo's `skills/<name>/SKILL.md` directly, follows it for work in this repo, and says so in its report. Because Copilot's rule isn't documented, any same-name skill there is treated as a conflict.
 
 ## Skills across providers
 
