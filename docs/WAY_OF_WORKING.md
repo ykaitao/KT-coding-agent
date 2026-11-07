@@ -30,7 +30,7 @@ The full procedure is the [`pr-review-loop`](../skills/pr-review-loop/SKILL.md) 
 ## Principles
 
 - **Trust only what's verified.** An agent's report is a claim. Check the result yourself (comment lines, commit IDs, changed files, replies) before telling anyone it's done. This loop exists because an early reviewer reported deleting comments it never deleted.
-- **Approvals belong to the owner, given to the manager.** Decisions such as merging come from the owner's own words to the manager. If a permission check blocks an action, no agent works around it; the manager tells the owner which permission rule is missing.
+- **Approvals belong to the owner, given to the manager.** Decisions such as merging come from the owner's own words to the manager. The owner has delegated control of the sessions to the manager. If a permission check blocks a review post in another session, the manager may post that session's saved draft, using only permissions the owner granted the manager, after checking that its `event` is `COMMENT`, its `commit_id` is the PR head, and every comment's `line` holds the text it's about. If the manager's own action is blocked, nobody works around it; the manager tells the owner which permission rule is missing.
 - **Isolate parallel work.** Sessions that share a checkout don't switch its branch under each other. Use `git worktree` for a second branch and remove the worktree afterwards.
 - **Small, honest diffs.** Docs describe what exists. Planned work is labelled as planned.
 - **Learn from each round.** After each round, judge whether the agents did a great job. If they did and the task will recur, capture it as a skill. If they didn't, fix the skill or the brief before the next round.
@@ -49,90 +49,8 @@ Keep these blocked unless the owner approves each one: approving PRs, requesting
 
 An auto-mode classifier rule doesn't replace the hook. A command that matches a `permissions.allow` rule runs without reaching the classifier, so once the review allow rule exists, the classifier never judges review posts. Without an allow rule, every post costs a classifier call that may be denied, and with `--input <file>` the `event` isn't in the command text the classifier sees. Without the hook, the owner accepts that review-posting permission also allows approving.
 
-Example hook, saved as `.claude/hooks/review-event-guard.py`. It fails closed. For any command that touches `pulls/<n>/reviews`, it first splits `--flag=value` and `-fVALUE`/`-FVALUE`/`-XVALUE` into flag and value. A plain read (no flags other than `--paginate`, `--jq` and similar) passes. Any other use is blocked unless the hook finds at least one `event` and every `event` it finds is `COMMENT`. It reads `event` from `-f`/`-F`/`--field`/`--raw-field event=...`, from `-F event=@file`, and from the `--input` file. It also blocks `gh pr review` unless it runs with `--comment` and without `--approve` or `--request-changes`. It's a guardrail against mistakes, not a sandbox: a command built to hide the endpoint (for example by assembling the path from shell variables) can still get past it.
+The hook ships in this repo as [`.claude/hooks/review-event-guard.py`](../.claude/hooks/review-event-guard.py), with tests in [`tests/review-event-guard-test.sh`](../tests/review-event-guard-test.sh) (`bash tests/review-event-guard-test.sh`). Copy both when adopting this process, and rerun the tests after changing the hook. It fails closed. For any command that touches `pulls/<n>/reviews`, it first splits `--flag=value` and `-fVALUE`/`-FVALUE`/`-XVALUE` into flag and value. A plain read (no flags other than `--paginate`, `--jq` and similar) passes. Any other use is blocked unless the hook finds at least one `event` and every `event` it finds is `COMMENT`. It reads `event` from `-f`/`-F`/`--field`/`--raw-field event=...`, from `-F event=@file`, and from the `--input` file. It also blocks `gh pr review` unless it runs with `--comment` and without `--approve` or `--request-changes`. It's a guardrail against mistakes, not a sandbox: a command built to hide the endpoint (for example by assembling the path from shell variables) can still get past it.
 
-```python
-#!/usr/bin/env python3
-# PreToolUse hook: allow PR reviews only with event COMMENT. Fails closed.
-import json, os, re, shlex, sys
-
-data = json.load(sys.stdin)
-cmd = data.get("tool_input", {}).get("command", "")
-cwd = data.get("cwd", ".")
-
-def block(why):
-    print(f"Blocked: {why}. PR reviews may only be posted with event COMMENT.", file=sys.stderr)
-    sys.exit(2)
-
-if not re.search(r"review", cmd, re.I):
-    sys.exit(0)
-try:
-    raw = shlex.split(cmd)
-except ValueError:
-    block("could not parse the command")
-
-# Normalize --flag=value and -fVALUE / -FVALUE / -XVALUE into flag, value.
-tokens = []
-for t in raw:
-    if t.startswith("--") and "=" in t:
-        tokens += t.split("=", 1)
-    elif re.match(r"-[fFX].", t):
-        tokens += [t[:2], t[2:]]
-    else:
-        tokens.append(t)
-
-# gh pr review: only --comment / -c is allowed.
-if "gh" in tokens and "pr" in tokens and "review" in tokens:
-    if not ({"--comment", "-c"} & set(tokens)) or {"--approve", "-a", "--request-changes", "-r"} & set(tokens):
-        block("gh pr review without --comment")
-
-if not any(re.search(r"pulls/.*reviews", t, re.I) for t in tokens):
-    sys.exit(0)
-
-# A plain read uses only these flags; anything else counts as a write.
-READ_FLAGS = {"--paginate", "--jq", "-q", "--template", "-t", "--silent", "--include", "-i", "--verbose", "--cache"}
-VALUE_FLAGS = {"--jq", "-q", "--template", "-t", "--cache"}
-writes, skip = False, False
-for t in tokens:
-    if skip:
-        skip = False
-        continue
-    if t.startswith("-") and t not in READ_FLAGS:
-        writes = True
-    skip = t in VALUE_FLAGS
-if not writes:
-    sys.exit(0)
-
-# The hook runs before the command, so a chained command could rewrite the
-# --input file after this check. Review writes must stand alone.
-if re.search(r"\|\||[;&|<>`\n]|\$\(", cmd):
-    block("post the review as a standalone command")
-
-def read_json_event(path):
-    try:
-        return json.load(open(os.path.join(cwd, path))).get("event")
-    except Exception:
-        return None  # stdin, unexpanded $VAR or ~, or unreadable file
-
-events = []
-for i, t in enumerate(tokens):
-    nxt = tokens[i + 1] if i + 1 < len(tokens) else ""
-    if t in ("-f", "-F", "--field", "--raw-field") and nxt.startswith("event="):
-        val = nxt[len("event="):]
-        if t in ("-F", "--field") and val.startswith("@"):
-            try:
-                val = open(os.path.join(cwd, val[1:])).read().strip()
-            except Exception:
-                val = None
-        events.append(val)
-    if t == "--input":
-        events.append(read_json_event(nxt))
-
-if not events:
-    block("no event found in a review write")
-if any(e != "COMMENT" for e in events):
-    block(f"event {events}")
-```
 
 Pass `--input` (and `-F event=@...`) a literal absolute or relative path. The hook sees the command text before the shell runs it, so shell variables and `~` aren't expanded. A path like `"$S/review.json"` or `~/review.json` can't be opened, and the hook blocks the post even when the event is COMMENT.
 
@@ -175,10 +93,11 @@ Skills live once in `skills/`. `.claude/skills` (Claude), `.agents/skills` (Code
 
 ## Adopting this in another repository
 
-1. Copy `skills/` and this file.
+1. Copy `skills/`, this file, `.claude/hooks/review-event-guard.py` and `tests/review-event-guard-test.sh`.
 2. Create the symlinks:
    ```bash
    for d in .claude .agents .github; do mkdir -p $d; [ -e $d/skills ] && [ ! -L $d/skills ] && { echo "move $d/skills into skills/ first"; continue; }; ln -sfn ../skills $d/skills; done
    ```
-3. On GitHub, turn on **Automatically delete head branches**.
-4. Ask your manager agent to "run the review/implement loop on PR N".
+3. Add the permission rules and the hook to `.claude/settings.local.json` (see "Permissions"), then run `bash tests/review-event-guard-test.sh`.
+4. On GitHub, turn on **Automatically delete head branches**.
+5. Ask your manager agent to "run the review/implement loop on PR N".

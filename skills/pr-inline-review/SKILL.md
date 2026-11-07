@@ -8,13 +8,16 @@ description: Review a GitHub pull request and post accurate, line-verified inlin
 ## Steps
 1. Read the diff (`gh pr diff <n> --repo <owner/repo>`) and the existing threads (`gh api --paginate repos/<owner/repo>/pulls/<n>/comments`). Get the head SHA from `gh pr view <n> --repo <owner/repo> --json headRefOid -q .headRefOid`.
 2. On a re-review, first check that each earlier comment was really addressed. Then look only for NEW actionable issues. Don't repeat resolved points, and leave out praise-only comments and pure style nitpicks.
-3. Look for correctness, overclaiming (statements the code doesn't support), unclear wording, rendering or syntax issues, typos, and inconsistencies.
-4. Post ONE review with event `COMMENT` via `gh api repos/<owner/repo>/pulls/<n>/reviews -X POST --input <json>`, with `commit_id` set to the head SHA and inline `comments` (`path`, `line`, `side: RIGHT`). Use ```` ```suggestion ```` blocks for concrete rewrites.
+3. Address every concern the brief raises: either comment on it or say in the review body why it doesn't hold. Never drop one silently.
+4. Look for correctness, overclaiming (statements the code doesn't support), unclear wording, rendering or syntax issues, typos, and inconsistencies.
+   - For security-relevant code (permission checks, hooks, validators), try to break it: build inputs that should be rejected and run them. Report only bypasses you reproduced, with the exact input and result.
+5. Post ONE review with event `COMMENT` by writing the review JSON to a file first, then posting it as a standalone command with a literal path: `gh api repos/<owner/repo>/pulls/<n>/reviews -X POST --input /abs/path/review.json` (no shell variables, `~`, or `&&`; a guard hook may block anything else), with `commit_id` set to the head SHA and inline `comments` (`path`, `line`, `side: RIGHT`). Use ```` ```suggestion ```` blocks for concrete rewrites.
    - Map every `line` to the NEW-file line number in the diff hunk, and check that the line holds the text you're commenting on (never a blank line).
    - If nothing is actionable, post one `COMMENT` review whose body says "No actionable comments."
-5. Verify: re-fetch the comments and confirm each one is on the intended line. If you delete or repost anything, re-fetch again. Never report an action you haven't verified.
+6. Verify: re-fetch the comments and confirm each one is on the intended line. If you delete or repost anything, re-fetch again. Never report an action you haven't verified.
    - Don't verify with `GET .../pulls/<n>/reviews/<review_id>/comments`: it returns `line: null` even for correctly placed comments. Use `GET .../pulls/comments/<id>` (or the paginated PR comments list) and compare `line` plus the last line of `diff_hunk`.
    - To check that a line holds the intended text, read the file at the head SHA (`gh api "repos/<owner/repo>/contents/<path>?ref=<sha>" --jq .content | base64 -d | sed -n '<line>p'`) rather than counting lines in `gh pr diff` output.
+   - If posting is blocked, don't work around it yourself. Keep the file and report its absolute path. The manager checks that its `event` is `COMMENT`, its `commit_id` is the PR head, and every comment's `line` holds the text it's about, and posts it only if the owner granted the manager that permission; otherwise the manager tells the owner which rule is missing.
    - A 422 "Line could not be resolved" error means a line falls outside the diff hunks, and nothing was posted.
 
 ## Rules
