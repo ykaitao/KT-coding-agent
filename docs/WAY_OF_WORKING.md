@@ -105,7 +105,7 @@ if not writes:
 
 # The hook runs before the command, so a chained command could rewrite the
 # --input file after this check. Review writes must stand alone.
-if re.search(r"&&|\|\||[;|<>`\n]|\$\(", cmd):
+if re.search(r"\|\||[;&|<>`\n]|\$\(", cmd):
     block("post the review as a standalone command")
 
 def read_json_event(path):
@@ -136,7 +136,7 @@ if any(e != "COMMENT" for e in events):
 
 Pass `--input` (and `-F event=@...`) a literal absolute or relative path. The hook sees the command text before the shell runs it, so shell variables and `~` aren't expanded. A path like `"$S/review.json"` or `~/review.json` can't be opened, and the hook blocks the post even when the event is COMMENT.
 
-Write the JSON in one step and post it in a separate command. The hook checks the `--input` file before any part of the command runs, so in `printf ... > rv.json && gh api ... --input rv.json` it would judge the file's old contents. The hook therefore blocks any review write whose command contains a shell operator (`&&`, `||`, `;`, `|`, `<`, `>`, `$(`, a backtick or a newline). That also covers those characters inside `-f body=...`, so put review text in the `--input` file.
+Write the JSON in one step and post it in a separate command. The hook checks the `--input` file before any part of the command runs, so in `printf ... > rv.json && gh api ... --input rv.json` it would judge the file's old contents. The hook therefore blocks any review write whose command contains a shell operator (`&&`, `&`, `||`, `;`, `|`, `<`, `>`, `$(`, a backtick or a newline). That also covers those characters inside `-f body=...`, so put review text in the `--input` file.
 
 Example `.claude/settings.local.json` (replace `<owner>/<repo>`; check the keys against your Claude Code version):
 
