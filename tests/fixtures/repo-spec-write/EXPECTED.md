@@ -2,6 +2,8 @@
 
 Each fixture is a vague request (`REQUEST.md`) plus the code it concerns. A spec written with the `repo-spec-write` skill should contain the items below. Match by meaning, not wording.
 
+**Grading:** by hand, by meaning. `score.py` gives a rough first pass, using keyword patterns per item: `python3 tests/fixtures/repo-spec-write/score.py python <spec.md>`. Its patterns approximate meaning, so check its misses by hand before reporting a number. A full scorer is still to come (#32 §4).
+
 Item kinds:
 - **criterion:** an observable acceptance criterion. At least one per fixture must fail on today's code.
 - **evidence:** a cited `file:line` (or a command and its output) showing today's behaviour.

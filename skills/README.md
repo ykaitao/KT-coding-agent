@@ -14,6 +14,7 @@ The skills live here. `.agents/skills`, `.claude/skills` and `.github/skills` ar
 - [`github-markdown-editing`](github-markdown-editing/SKILL.md): write and edit GitHub comments, descriptions and reviews so their Markdown renders correctly.
 - [`branch-worktree-cleanup`](branch-worktree-cleanup/SKILL.md): audit branches and worktrees, keep useful unmerged work, and safely remove stale local state.
 - [`propose-skill`](propose-skill/SKILL.md): turn private experience into a new public skill without leaking anything, then propose it as a pull request.
+- [`repo-spec-write`](repo-spec-write/SKILL.md): turn a vague request or bug report into a spec with evidence, observable acceptance criteria, non-goals and open questions for the owner.
 
 The overall process is described in [`docs/WAY_OF_WORKING.md`](../docs/WAY_OF_WORKING.md).
 
