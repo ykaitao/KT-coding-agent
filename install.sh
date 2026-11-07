@@ -20,7 +20,7 @@ if [ -z "$target" ]; then
 fi
 for tool in git python3 jq; do
   if ! command -v "$tool" >/dev/null 2>&1; then
-    echo "error: install.sh needs $tool (the guard hook and the checks use git, python3 and jq)" >&2
+    echo "error: install.sh needs $tool (the guard hook needs python3; the checks also need git and jq)" >&2
     exit 1
   fi
 done
