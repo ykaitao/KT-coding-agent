@@ -19,6 +19,12 @@ check() { # expected_exit command
   got=$?
   if [ "$got" -eq "$expected" ]; then echo "ok   $got  $cmd"; else echo "FAIL $got (want $expected)  $cmd"; fail=1; fi
 }
+check_raw() { # expected_exit raw_stdin: malformed hook input must still block
+  local expected=$1 input=$2 got
+  printf '%s' "$input" | python3 -I "$hook" 2>/dev/null
+  got=$?
+  if [ "$got" -eq "$expected" ]; then echo "ok   $got  input: $input"; else echo "FAIL $got (want $expected)  input: $input"; fail=1; fi
+}
 
 R=repos/o/r/pulls/1/reviews
 # Allowed: comment-only reviews and reads.
@@ -55,5 +61,10 @@ check 2 $'cp a.json c.json\ngh api '"$R"$' -X POST --input c.json'
 check 2 "gh api $R -X POST --input c.json || true"
 check 2 "gh api $R -X POST --input c.json \`true\`"
 check 2 "gh api $R -X POST --input c.json < c.json"
+# Blocked: malformed hook input fails closed (exit 2), never exit 1.
+check_raw 2 'not json'
+check_raw 2 '{"tool_input":"x"}'
+check_raw 2 '{"tool_input":{}}'
+check_raw 2 '{"tool_input":{"command":5}}'
 
 exit $fail
