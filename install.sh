@@ -79,7 +79,7 @@ fi
 
 # 2. Docs, guard hook and checks.
 for rel in docs/WAY_OF_WORKING.md AGENTS.md .claude/hooks/review-event-guard.py \
-  tests/review-event-guard-test.sh tests/skills-check.sh; do
+  tests/review-event-guard-test.sh tests/skills-check.sh tests/skills-conflicts.sh; do
   copy_file "$rel"
 done
 
@@ -126,8 +126,14 @@ fi
 echo "add the allow rules for each role: see 'Permissions' in docs/WAY_OF_WORKING.md"
 
 # 5. Checks.
+# conflicts <skills dir>: warns about clashes with the user's own skills; never fails the install.
+conflicts() {
+  echo "checking for conflicts with your own skills (names and paths only):"
+  bash "$src/tests/skills-conflicts.sh" --repo-skills "$1" 2>&1 | sed 's/^/  /'
+}
 if [ "$dry" = 1 ]; then
   echo "would run tests/review-event-guard-test.sh and tests/skills-check.sh"
+  conflicts "$src/skills"
   exit 0
 fi
 status=0
@@ -139,4 +145,5 @@ for t in tests/review-event-guard-test.sh tests/skills-check.sh; do
     status=1
   fi
 done
+conflicts "$target/skills"
 exit "$status"
