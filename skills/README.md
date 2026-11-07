@@ -10,6 +10,8 @@ The skills live here. `.agents/skills`, `.claude/skills` and `.github/skills` ar
 - [`pr-inline-review`](pr-inline-review/SKILL.md): review a PR with line-checked inline comments.
 - [`pr-address-review`](pr-address-review/SKILL.md): address review comments, push, and reply in each thread.
 - [`scan-code-health`](scan-code-health/SKILL.md): read-only scan of a named path for code-health problems, written as an evidence-backed report.
+- [`github-markdown-editing`](github-markdown-editing/SKILL.md): write and edit GitHub comments, descriptions and reviews so their Markdown renders correctly.
+- [`branch-worktree-cleanup`](branch-worktree-cleanup/SKILL.md): audit branches and worktrees, keep useful unmerged work, and safely remove stale local state.
 
 The overall process is described in [`docs/WAY_OF_WORKING.md`](../docs/WAY_OF_WORKING.md).
 
@@ -23,7 +25,7 @@ bash tests/skills-check.sh
 
 Then check that each provider actually finds the skills. Open the repo root and ask:
 
-- **Claude Code** (reads `.claude/skills`): ask "which skills are available?". All three skills above should be listed.
+- **Claude Code** (reads `.claude/skills`): ask "which skills are available?". All skills above should be listed.
 - **Codex CLI** (expected to read `.agents/skills`; unverified): `codex exec --sandbox read-only "list the skills available to you"`. The default model may be unsupported for your account; pass a supported one with `-m <model>`.
 - **GitHub Copilot in VS Code** (expected to read `.github/skills`; unverified): in Copilot Chat agent mode, ask "which skills are available?".
 
