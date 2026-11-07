@@ -1,0 +1,14 @@
+{
+  "name": "kt-coding-agent",
+  "description": "Skills and a review-event guard for a manager-led PR review loop",
+  "owner": {
+    "name": "Kaitao Yang"
+  },
+  "plugins": [
+    {
+      "name": "kt-coding-agent",
+      "source": "./",
+      "description": "Inline PR review, addressing review comments, the review loop, and a hook that allows only comment-only reviews"
+    }
+  ]
+}
