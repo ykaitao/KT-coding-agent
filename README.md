@@ -20,8 +20,8 @@ The framework will orchestrate a swarm of domain-specific sub-agents to analyze 
   * **Peer-Review Agents:** Provide automated, multi-pass code reviews to enforce code style, maintainability, and safety before merging.
 
 ### 3. Cognitive Memory & Evolutionary Learning
-* **Persistent Skill Synthesis (planned):** Records successful problem-solving paths and refactoring strategies as a reusable skill library.
-* **Long-Term Preference Anchoring:** Maintains a stateful profile of user architectural preferences, coding standards, and operational guardrails to prevent regressions or out-of-bounds code generation.
+* **Persistent Skill Synthesis:** Records successful problem-solving paths and refactoring strategies as a reusable skill library.
+* **Long-Term Preference Anchoring:** Maintains a stateful profile of user architectural preferences, coding standards, and operational guardrails to help prevent regressions or out-of-bounds code generation.
 
 ### 4. Verification & Human-in-the-Loop (HITL)
 * **Evidence-Based Engineering:** Every proposed patch is backed by automated tests or other verifiable evidence to reduce the risk of incorrect changes.
