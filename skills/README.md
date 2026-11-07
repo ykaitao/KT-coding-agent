@@ -11,3 +11,25 @@ The skills live here. `.agents/skills`, `.claude/skills` and `.github/skills` ar
 - [`pr-address-review`](pr-address-review/SKILL.md): address review comments, push, and reply in each thread.
 
 The overall process is described in [`docs/WAY_OF_WORKING.md`](../docs/WAY_OF_WORKING.md).
+
+## Verifying discovery
+
+First run the structural check from the repo root. It confirms the three symlinks resolve to `skills/`, each `SKILL.md` has frontmatter with a `name` matching its folder and a non-empty `description`, and the list above matches the skill folders:
+
+```bash
+bash tests/skills-check.sh
+```
+
+Then check that each provider actually finds the skills. Open the repo root and ask:
+
+- **Claude Code** (reads `.claude/skills`): ask "which skills are available?". All three skills above should be listed.
+- **Codex CLI** (expected to read `.agents/skills`; unverified): `codex exec --sandbox read-only "list the skills available to you"`. The default model may be unsupported for your account; pass a supported one with `-m <model>`.
+- **GitHub Copilot in VS Code** (expected to read `.github/skills`; unverified): in Copilot Chat agent mode, ask "which skills are available?".
+
+Record each check:
+
+| Date | Provider | Version | Result |
+| --- | --- | --- | --- |
+| 2026-11-07 | Claude Code (desktop app) | Opus 5.5 | All three skills listed |
+| 2026-11-07 | Codex CLI | 0.145.0 | Not run: default model `gpt-6-luna` unsupported with a ChatGPT account |
+| | GitHub Copilot (VS Code) | | Not yet checked |
