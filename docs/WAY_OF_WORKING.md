@@ -49,43 +49,87 @@ Keep these blocked unless the owner approves each one: approving PRs, requesting
 
 An auto-mode classifier rule doesn't replace the hook. A command that matches a `permissions.allow` rule runs without reaching the classifier, so once the review allow rule exists, the classifier never judges review posts. Without an allow rule, every post costs a classifier call that may be denied, and with `--input <file>` the `event` isn't in the command text the classifier sees. Without the hook, the owner accepts that review-posting permission also allows approving.
 
-Example hook, saved as `.claude/hooks/review-event-guard.py`. It blocks writes to `.../pulls/<n>/reviews...` unless every `event` it can find is `COMMENT`, and it also blocks when it can't read the event (no event, or `--input -`). Reads such as `GET .../reviews` pass.
+Example hook, saved as `.claude/hooks/review-event-guard.py`. It fails closed. For any command that touches `pulls/<n>/reviews`, it first splits `--flag=value` and `-fVALUE`/`-FVALUE`/`-XVALUE` into flag and value. A plain read (no flags other than `--paginate`, `--jq` and similar) passes. Any other use is blocked unless the hook finds at least one `event` and every `event` it finds is `COMMENT`. It reads `event` from `-f`/`-F`/`--field`/`--raw-field event=...`, from `-F event=@file`, and from the `--input` file. It also blocks `gh pr review` unless it runs with `--comment` and without `--approve` or `--request-changes`. It's a guardrail against mistakes, not a sandbox: a command built to hide the endpoint (for example by assembling the path from shell variables) can still get past it.
 
 ```python
 #!/usr/bin/env python3
-# PreToolUse hook: block any GitHub PR review post whose event is not COMMENT.
+# PreToolUse hook: allow PR reviews only with event COMMENT. Fails closed.
 import json, os, re, shlex, sys
 
 data = json.load(sys.stdin)
 cmd = data.get("tool_input", {}).get("command", "")
-if not re.search(r"pulls/\d+/reviews\b", cmd):
+cwd = data.get("cwd", ".")
+
+def block(why):
+    print(f"Blocked: {why}. PR reviews may only be posted with event COMMENT.", file=sys.stderr)
+    sys.exit(2)
+
+if not re.search(r"review", cmd, re.I):
     sys.exit(0)
 try:
-    tokens = shlex.split(cmd)
+    raw = shlex.split(cmd)
 except ValueError:
-    tokens = cmd.split()
+    block("could not parse the command")
 
-writes, events = False, []
+# Normalize --flag=value and -fVALUE / -FVALUE / -XVALUE into flag, value.
+tokens = []
+for t in raw:
+    if t.startswith("--") and "=" in t:
+        tokens += t.split("=", 1)
+    elif re.match(r"-[fFX].", t):
+        tokens += [t[:2], t[2:]]
+    else:
+        tokens.append(t)
+
+# gh pr review: only --comment / -c is allowed.
+if "gh" in tokens and "pr" in tokens and "review" in tokens:
+    if not ({"--comment", "-c"} & set(tokens)) or {"--approve", "-a", "--request-changes", "-r"} & set(tokens):
+        block("gh pr review without --comment")
+
+if not any(re.search(r"pulls/.*reviews", t, re.I) for t in tokens):
+    sys.exit(0)
+
+# A plain read uses only these flags; anything else counts as a write.
+READ_FLAGS = {"--paginate", "--jq", "-q", "--template", "-t", "--silent", "--include", "-i", "--verbose", "--cache"}
+VALUE_FLAGS = {"--jq", "-q", "--template", "-t", "--cache"}
+writes, skip = False, False
+for t in tokens:
+    if skip:
+        skip = False
+        continue
+    if t.startswith("-") and t not in READ_FLAGS:
+        writes = True
+    skip = t in VALUE_FLAGS
+if not writes:
+    sys.exit(0)
+
+def read_json_event(path):
+    try:
+        return json.load(open(os.path.join(cwd, path))).get("event")
+    except Exception:
+        return None  # stdin, unexpanded $VAR or ~, or unreadable file
+
+events = []
 for i, t in enumerate(tokens):
     nxt = tokens[i + 1] if i + 1 < len(tokens) else ""
-    if t in ("-X", "--method") and nxt.upper() != "GET":
-        writes = True
-    if t in ("-f", "-F", "--field", "--raw-field"):
-        writes = True
-        if nxt.startswith("event="):
-            events.append(nxt[len("event="):])
+    if t in ("-f", "-F", "--field", "--raw-field") and nxt.startswith("event="):
+        val = nxt[len("event="):]
+        if t in ("-F", "--field") and val.startswith("@"):
+            try:
+                val = open(os.path.join(cwd, val[1:])).read().strip()
+            except Exception:
+                val = None
+        events.append(val)
     if t == "--input":
-        writes = True
-        try:
-            path = os.path.join(data.get("cwd", "."), nxt)
-            events.append(json.load(open(path)).get("event"))
-        except Exception:
-            events.append(None)  # stdin or unreadable file: can't tell
+        events.append(read_json_event(nxt))
 
-if writes and (not events or any(e != "COMMENT" for e in events)):
-    print("Blocked: PR reviews may only be posted with event COMMENT.", file=sys.stderr)
-    sys.exit(2)
+if not events:
+    block("no event found in a review write")
+if any(e != "COMMENT" for e in events):
+    block(f"event {events}")
 ```
+
+Pass `--input` (and `-F event=@...`) a literal absolute or relative path. The hook sees the command text before the shell runs it, so shell variables and `~` aren't expanded. A path like `"$S/review.json"` or `~/review.json` can't be opened, and the hook blocks the post even when the event is COMMENT.
 
 Example `.claude/settings.local.json` (replace `<owner>/<repo>`; check the keys against your Claude Code version):
 
