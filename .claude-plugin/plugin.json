@@ -1,0 +1,24 @@
+{
+  "name": "kt-coding-agent",
+  "version": "0.1.0",
+  "description": "Manager-led review and implement loop: skills for inline PR review, addressing review comments and running the loop, plus a hook that allows only comment-only PR reviews.",
+  "author": {
+    "name": "Kaitao Yang"
+  },
+  "repository": "https://github.com/ykaitao/KT-coding-agent",
+  "license": "MIT",
+  "keywords": ["code-review", "pull-requests", "agents", "github"],
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/.claude/hooks/review-event-guard.py\""
+          }
+        ]
+      }
+    ]
+  }
+}
