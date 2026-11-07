@@ -9,6 +9,7 @@ The skills live here. `.agents/skills`, `.claude/skills` and `.github/skills` ar
 - [`pr-review-loop`](pr-review-loop/SKILL.md): the manager's loop that alternates review and implement rounds until a review is clean.
 - [`pr-inline-review`](pr-inline-review/SKILL.md): review a PR with line-checked inline comments.
 - [`pr-address-review`](pr-address-review/SKILL.md): address review comments, push, and reply in each thread.
+- [`scan-code-health`](scan-code-health/SKILL.md): read-only scan of a named path for code-health problems, written as an evidence-backed report.
 
 The overall process is described in [`docs/WAY_OF_WORKING.md`](../docs/WAY_OF_WORKING.md).
 
