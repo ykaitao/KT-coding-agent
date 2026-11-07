@@ -5,7 +5,7 @@ description: Read-only scan of a named path or glob for code-health problems (co
 
 # Scan code health
 
-Read-only. Don't edit files, commit, push, open issues or PRs, or post comments anywhere.
+Read-only. The only file you write is the report, at the path the user names; don't commit it. Don't edit other files, commit, push, open issues or PRs, or post comments anywhere. Run only the project's own local tests or linters, and nothing that pushes or posts.
 
 ## Input
 - A repository checkout.
@@ -29,7 +29,7 @@ Leave out style, naming, formatting, architecture, performance, cost, security a
 5. Write the report.
 
 ## Report format
-One Markdown file at the report path:
+One Markdown file at the report path. Use this structure exactly: the headings, field labels and their order are fixed, because later steps parse them.
 
 ````markdown
 # Code-health scan: <path or glob>
@@ -56,7 +56,7 @@ Severity:
 If there are no findings, the report says `## Findings (0)` and the line `No code-health findings in <path or glob>.` Never pad the report.
 
 ## Rules
-- Read-only: no edits, commits, pushes, issues, PRs or comments.
+- Read-only: the report is the only file you write. No other edits, commits, pushes, issues, PRs or comments.
 - Every finding has a file, a line, a severity, a claim and evidence. A finding without evidence is dropped, not softened.
 - Report only what you verified. Don't claim the scan is complete or that the code is free of bugs.
 
