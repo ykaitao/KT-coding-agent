@@ -1,0 +1,16 @@
+# Markdown lint for CI. Purely stylistic rules the existing docs break are off.
+config:
+  default: true
+  MD013: false # line length: prose is one line per paragraph
+  MD022: false # blank lines around headings
+  MD032: false # blank lines around lists
+  MD012: false # multiple blank lines (whitespace only)
+  MD031: false # blank lines around fences (whitespace only)
+  MD024:
+    siblings_only: true
+ignores:
+  # Symlinks to skills/; linting them again only duplicates results.
+  - ".agents/skills/**"
+  - ".claude/skills/**"
+  - ".github/skills/**"
+  - "node_modules/**"
