@@ -6,6 +6,58 @@ def block(why):
     print(f"Blocked: {why}. PR reviews may only be posted with event COMMENT.", file=sys.stderr)
     sys.exit(2)
 
+# GraphQL mutations that create, submit, change or remove a PR review. The \b
+# keeps comment-only mutations such as addPullRequestReviewComment out.
+REVIEW_MUTATION = re.compile(r"\w*PullRequestReview\b")
+
+def check_graphql(cmd, tokens, cwd):
+    """Block `gh api graphql` review mutations unless every event is COMMENT."""
+    texts, fields, from_file = [], {}, False
+    for i, t in enumerate(tokens):
+        nxt = tokens[i + 1] if i + 1 < len(tokens) else ""
+        if t in ("-f", "-F", "--field", "--raw-field") and "=" in nxt:
+            name, val = nxt.split("=", 1)
+            if t in ("-F", "--field") and val.startswith("@"):
+                from_file = True
+                try:
+                    val = open(os.path.join(cwd, val[1:])).read()
+                except Exception:
+                    block(f"could not read {val} for a GraphQL call")
+            fields[name] = val
+            texts.append(val)
+        if t == "--input":
+            from_file = True
+            try:
+                body = open(os.path.join(cwd, nxt)).read()
+            except Exception:
+                block(f"could not read --input {nxt} for a GraphQL call")
+            texts.append(body)
+            try:
+                payload = json.loads(body)
+            except ValueError:
+                payload = None
+            if isinstance(payload, dict) and isinstance(payload.get("variables"), dict):
+                fields.update({k: str(v) for k, v in payload["variables"].items()})
+    text = cmd + "\n" + "\n".join(texts)
+    # A chained command could rewrite the query file after this check.
+    if from_file and re.search(r"\|\||[;&|<>`\n]|\$\(", cmd):
+        block("run a GraphQL call that reads a file as a standalone command")
+    if not re.search(r"\bmutation\b", text) or not (
+        REVIEW_MUTATION.search(text) or re.search(r"APPROVE|REQUEST_CHANGES", text)
+    ):
+        return
+    events = []
+    for m in re.finditer(r"\bevent\b\W*\s*:\s*\"?(\$?\w+)", text):
+        val = m.group(1)
+        if val.startswith("$"):
+            val = fields.get(val[1:])  # a variable passed with -f/-F or in --input
+        events.append(val)
+    events += [v for k, v in fields.items() if k == "event"]
+    if not events:
+        block("no event found in a GraphQL review mutation")
+    if any(e != "COMMENT" for e in events):
+        block(f"GraphQL review mutation with event {events}")
+
 def main():
     data = json.load(sys.stdin)
     if not isinstance(data, dict) or not isinstance(data.get("tool_input"), dict):
@@ -15,7 +67,7 @@ def main():
         block("hook input has no command string")
     cwd = data.get("cwd", ".")
 
-    if not re.search(r"review", cmd, re.I):
+    if not re.search(r"review|graphql", cmd, re.I):
         sys.exit(0)
     try:
         raw = shlex.split(cmd)
@@ -31,6 +83,9 @@ def main():
             tokens += [t[:2], t[2:]]
         else:
             tokens.append(t)
+
+    if "graphql" in tokens:
+        check_graphql(cmd, tokens, cwd)
 
     # gh pr review: only --comment / -c is allowed.
     if "gh" in tokens and "pr" in tokens and "review" in tokens:

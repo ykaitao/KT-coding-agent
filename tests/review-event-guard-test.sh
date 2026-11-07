@@ -9,6 +9,11 @@ echo '{"event":"COMMENT"}' > "$tmp/c.json"
 echo '{"event":"APPROVE"}' > "$tmp/a.json"
 echo 'APPROVE' > "$tmp/ev.txt"
 echo 'COMMENT' > "$tmp/evc.txt"
+echo 'mutation { addPullRequestReview(input:{pullRequestId:"X", event:APPROVE}) { clientMutationId } }' > "$tmp/qa.graphql"
+echo 'mutation { addPullRequestReview(input:{pullRequestId:"X", event:COMMENT}) { clientMutationId } }' > "$tmp/qc.graphql"
+echo 'query { repository(owner:"o", name:"r") { pullRequest(number:1) { reviews(first:5) { nodes { state } } } } }' > "$tmp/qr.graphql"
+echo '{"query":"mutation($e: PullRequestReviewEvent!) { submitPullRequestReview(input:{pullRequestReviewId:\"X\", event:$e}) { clientMutationId } }","variables":{"e":"APPROVE"}}' > "$tmp/ga.json"
+echo '{"query":"query { viewer { login } }"}' > "$tmp/gr.json"
 
 fail=0
 check() { # expected_exit command
@@ -66,5 +71,21 @@ check_raw 2 'not json'
 check_raw 2 '{"tool_input":"x"}'
 check_raw 2 '{"tool_input":{}}'
 check_raw 2 '{"tool_input":{"command":5}}'
+# GraphQL: review mutations need event COMMENT; queries and other mutations pass.
+check 2 'gh api graphql -f query=mutation{addPullRequestReview(input:{pullRequestId:"X",event:APPROVE}){clientMutationId}}'
+check 2 'gh api graphql -f query="mutation { submitPullRequestReview(input:{pullRequestReviewId:\"X\", event: REQUEST_CHANGES}) { clientMutationId } }"'
+check 2 'gh api graphql -f query="mutation { updatePullRequestReview(input:{pullRequestReviewId:\"X\", body:\"x\"}) { clientMutationId } }"'
+check 2 'gh api graphql -f query="mutation(\$e: PullRequestReviewEvent!) { submitPullRequestReview(input:{pullRequestReviewId:\"X\", event:\$e}) { clientMutationId } }" -f e=APPROVE'
+check 2 'gh api graphql -F query=@qa.graphql'
+check 2 'gh api graphql --input ga.json'
+check 2 'gh api graphql -F query=@missing.graphql'
+check 2 'gh api graphql --input missing.json'
+check 2 'cp qa.graphql qc.graphql ; gh api graphql -F query=@qc.graphql'
+check 0 'gh api graphql -f query="mutation { addPullRequestReview(input:{pullRequestId:\"X\", event:COMMENT}) { clientMutationId } }"'
+check 0 'gh api graphql -F query=@qc.graphql'
+check 0 'gh api graphql -F query=@qr.graphql'
+check 0 'gh api graphql --input gr.json'
+check 0 'gh api graphql -f query="query { viewer { login } }"'
+check 0 'gh api graphql -f query="mutation { addPullRequestReviewComment(input:{pullRequestReviewId:\"X\", body:\"x\"}) { clientMutationId } }"'
 
 exit $fail
