@@ -25,7 +25,7 @@ The full procedure is the [`pr-review-loop`](../skills/pr-review-loop/SKILL.md) 
 4. **Implement:** the implement session makes minimal edits, pushes, and replies in every thread.
 5. **Check the fixes:** the manager confirms on GitHub the PR head, the changed files and the replies.
 6. Repeat from step 2 until a review has **no actionable comments**.
-7. **Merge** only when the owner says so. Then **clean up**: `git fetch --prune`, remove worktrees, `git branch -d` the merged branch, and fast-forward `master`.
+7. **Merge** only when the owner says so. Then **clean up**: `git fetch --prune`, remove worktrees, fast-forward the default branch, and then `git branch -d` the merged branch (`-D` after a squash or rebase merge, once GitHub shows the PR as merged).
 
 ## Principles
 
@@ -52,7 +52,7 @@ Skills live once in `skills/`. `.claude/skills` (Claude), `.agents/skills` (Code
 1. Copy `skills/` and this file.
 2. Create the symlinks:
    ```bash
-   for d in .claude .agents .github; do mkdir -p $d && ln -sfn ../skills $d/skills; done
+   for d in .claude .agents .github; do mkdir -p $d; [ -e $d/skills ] && [ ! -L $d/skills ] && { echo "move $d/skills into skills/ first"; continue; }; ln -sfn ../skills $d/skills; done
    ```
 3. On GitHub, turn on **Automatically delete head branches**.
 4. Ask your manager agent to "run the review/implement loop on PR N".

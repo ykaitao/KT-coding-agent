@@ -19,7 +19,7 @@ After each round, judge each agent's work. If something went wrong, improve the 
 
 ## Finish
 - Report to the owner: rounds run, final review URL, and anything left unverified. Merge only on their word.
-- After the merge, run `git fetch --prune`, remove any worktrees for the branch, `git branch -d <branch>`, and fast-forward the default branch.
+- After the merge, run `git fetch --prune`, remove any worktrees for the branch, fast-forward the default branch, then `git branch -d <branch>` (`-D` after a squash or rebase merge, once GitHub shows the PR as merged).
 
 ## Rules
 - Never approve, resolve threads, or merge on your own initiative.
