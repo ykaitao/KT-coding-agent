@@ -17,6 +17,8 @@ jobs:
         run: python3 --version && jq --version
       - name: Review-event guard tests
         run: bash tests/review-event-guard-test.sh
+      - name: Skills check (structure and leaks)
+        run: bash tests/skills-check.sh
 
   markdown-lint:
     runs-on: ubuntu-latest
