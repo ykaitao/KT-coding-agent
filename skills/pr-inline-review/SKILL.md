@@ -17,7 +17,7 @@ description: Review a GitHub pull request and post accurate, line-verified inlin
 6. Verify: re-fetch the comments and confirm each one is on the intended line. If you delete or repost anything, re-fetch again. Never report an action you haven't verified.
    - Don't verify with `GET .../pulls/<n>/reviews/<review_id>/comments`: it returns `line: null` even for correctly placed comments. Use `GET .../pulls/comments/<id>` (or the paginated PR comments list) and compare `line` plus the last line of `diff_hunk`.
    - To check that a line holds the intended text, read the file at the head SHA (`gh api "repos/<owner/repo>/contents/<path>?ref=<sha>" --jq .content | base64 -d | sed -n '<line>p'`) rather than counting lines in `gh pr diff` output.
-   - If posting is blocked, don't work around it yourself. Keep the file and report its absolute path. The manager checks every line and posts it only if the owner granted the manager that permission; otherwise the manager tells the owner which rule is missing.
+   - If posting is blocked, don't work around it yourself. Keep the file and report its absolute path. The manager checks that its `event` is `COMMENT`, its `commit_id` is the PR head, and every comment's `line` holds the text it's about, and posts it only if the owner granted the manager that permission; otherwise the manager tells the owner which rule is missing.
    - A 422 "Line could not be resolved" error means a line falls outside the diff hunks, and nothing was posted.
 
 ## Rules
