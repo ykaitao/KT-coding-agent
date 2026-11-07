@@ -6,6 +6,8 @@ installer="$root/install.sh"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 fail=0
+# The installer's conflict check reads user skill folders: point it at scratch ones, never ~/.
+export KT_SKILLS_USER_DIRS="$tmp/home/.claude/skills"
 
 ok()  { echo "ok   $1"; }
 bad() { echo "FAIL $1"; fail=1; }
@@ -22,7 +24,8 @@ t="$(new_repo clean)"
 out="$(bash "$installer" "$t" 2>&1)"; code=$?
 check "clean: exit 0" [ "$code" -eq 0 ]
 for f in skills/README.md skills/pr-review-loop/SKILL.md docs/WAY_OF_WORKING.md AGENTS.md \
-  .claude/hooks/review-event-guard.py tests/review-event-guard-test.sh tests/skills-check.sh; do
+  .claude/hooks/review-event-guard.py tests/review-event-guard-test.sh tests/skills-check.sh \
+  tests/skills-conflicts.sh; do
   check "clean: $f copied" [ -f "$t/$f" ]
 done
 for d in .claude .agents .github; do check "clean: $d/skills symlink" is_link "$t" "$d"; done
@@ -72,6 +75,7 @@ out="$(bash "$installer" --dry-run "$t" 2>&1)"; code=$?
 check "dry run: exit 0" [ "$code" -eq 0 ]
 check "dry run: nothing changed" [ "$before" = "$(snapshot "$t")" ]
 check "dry run: says what it would do" grep -q "^would copy skills/" <<<"$out"
+check "dry run: runs the conflict check" grep -q "skills conflicts: .* 0 same-name" <<<"$out"
 
 # 6. Not a Git repo root: refused, nothing written.
 mkdir -p "$tmp/plain"
@@ -102,5 +106,15 @@ out="$(PATH="$bin" "$(command -v bash)" "$installer" "$t" 2>&1)"; code=$?
 check "missing tools: exit non-zero" [ "$code" -ne 0 ]
 check "missing tools: names python3" grep -q "needs python3" <<<"$out"
 check "missing tools: nothing written" [ "$(ls -A "$t")" = ".git" ]
+
+# 9. A personal skill with the same name: warned, install still succeeds.
+mkdir -p "$tmp/home/.claude/skills/pr-review-loop"
+printf -- '---\nname: pr-review-loop\ndescription: My own.\n---\n' > "$tmp/home/.claude/skills/pr-review-loop/SKILL.md"
+t="$(new_repo conflict)"
+out="$(bash "$installer" "$t" 2>&1)"; code=$?
+check "conflict: exit 0 (warning only)" [ "$code" -eq 0 ]
+check "conflict: same-name warning printed" grep -q "WARN same name (folder and name): pr-review-loop" <<<"$out"
+check "conflict: Claude Code winner named" grep -q "Claude Code loads the personal copy" <<<"$out"
+rm -rf "$tmp/home"
 
 exit "$fail"
