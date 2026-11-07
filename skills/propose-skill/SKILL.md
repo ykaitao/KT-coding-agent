@@ -23,7 +23,7 @@ You turn private experience into a public skill. The private source never leaves
 5. **Check it's clean.**
    - Put the user's private terms, one per line, in the file named by `$SKILLS_PRIVATE_TERMS` (by default `private-terms.txt` under `.config/kt-coding-agent` in the home directory). It stays outside the repo and is never committed. Without it, that part of the check is skipped.
    - Run `bash tests/skills-check.sh`. It must pass. It scans everything under `skills/` for leaks: home paths, emails, tokens, references to other repos, and the private terms. Fix every hit.
-   - The check doesn't scan the PR body or the commit message, so count private-term hits in those two drafts yourself. Each command prints only a count, which must be 0: `grep -c -i -F -f "$SKILLS_PRIVATE_TERMS" <draft>`. Also read both drafts for home paths, emails and tokens.
+   - The check doesn't scan the PR title, the PR body or the commit message, so count private-term hits in those three drafts yourself (keep the title in a file too). Each command prints only a count, which must be 0: `grep -c -i -F -f "${SKILLS_PRIVATE_TERMS:-$HOME/.config/kt-coding-agent/private-terms.txt}" <draft>`. Remove blank lines from the terms file first, because a blank line matches every line. Also read all three drafts for home paths, emails and tokens.
    - Check that no run of 6 words is shared with the source. This prints only a count:
 
      ```bash
@@ -37,7 +37,7 @@ You turn private experience into a public skill. The private source never leaves
      PY
      ```
 
-     Run it for every pair of a source file and a published file: `skills/<name>/SKILL.md`, the `skills/README.md` line (save it to a scratch file first), the PR body draft and the commit message draft. If it reports any shared runs, rewrite those passages in new words and rerun until every pair reports 0.
+     Run it for every pair of a source file and a published file: `skills/<name>/SKILL.md`, the `skills/README.md` line (save it to a scratch file first), the PR title, PR body and commit message drafts. If it reports any shared runs, rewrite those passages in new words and rerun until every pair reports 0.
    - Reread the diff (`git diff`) and both drafts as a stranger would: nothing should hint at who the user is or what they work on.
 6. **Propose.** Commit only the new skill and the `skills/README.md` line, on a new branch from an up-to-date default branch, using the checked message (`git commit -F <commit-message draft>`). Push, then open a draft PR with the checked body: `gh pr create --draft --title "<title>" --body-file <absolute path to the PR body draft>`. Don't use `--template`: it only pre-fills an interactive editor. Report the PR URL to the user.
 7. **Review.** The PR goes through the review loop like code (`pr-review-loop`, with `pr-inline-review` and `pr-address-review`). Ask the reviewer to also check for leaks, overlap with existing skills, and whether the triggers in the description can be tested.
