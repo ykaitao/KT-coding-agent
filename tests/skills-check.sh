@@ -3,7 +3,11 @@
 #   1. .claude/skills, .agents/skills and .github/skills are symlinks to skills/
 #   2. each skills/*/SKILL.md has frontmatter with a matching name and a description
 #   3. skills/README.md lists exactly the skills that exist
+#   4. no file under skills/ leaks home paths, emails, tokens, other repos'
+#      issue/PR references or URLs, or (locally) terms from a private list
 # Run from anywhere: bash tests/skills-check.sh
+# Private terms: one per line in $SKILLS_PRIVATE_TERMS
+# (default ~/.config/kt-coding-agent/private-terms.txt). Never commit that file.
 set -u
 
 root="$(cd "$(dirname "$0")/.." && pwd -P)"
@@ -91,6 +95,68 @@ for name in $existing; do
     fail "skills/$name exists but is not listed in skills/README.md"
   fi
 done
+
+# 4. Leak checks over every file under skills/. Each check prints one line.
+terms_file="${SKILLS_PRIVATE_TERMS:-$HOME/.config/kt-coding-agent/private-terms.txt}"
+leak_out="$(python3 - "$skills_dir" "$terms_file" 2>&1 <<'PY'
+import os, re, sys
+skills_dir, terms_file = sys.argv[1], sys.argv[2]
+this_repo = "ykaitao/kt-coding-agent"
+placeholders = {"owner/repo", "<owner/repo>"}
+
+files = []
+for base, _, names in os.walk(skills_dir):
+    for name in sorted(names):
+        path = os.path.join(base, name)
+        try:
+            text = open(path, encoding="utf-8").read()
+        except (UnicodeDecodeError, OSError):
+            continue
+        files.append((os.path.relpath(path, os.path.dirname(skills_dir)), text))
+
+def scan(label, pattern, keep=lambda m: True, flags=0):
+    hits = []
+    for rel, text in files:
+        for n, line in enumerate(text.splitlines(), 1):
+            for m in re.finditer(pattern, line, flags):
+                if keep(m):
+                    hits.append("%s:%d: %s" % (rel, n, m.group(0)))
+    if hits:
+        print("FAIL %s: %s" % (label, "; ".join(hits[:5])))
+    else:
+        print("ok   no %s in skills/" % label)
+
+scan("home paths", r"/Users/[A-Za-z]|/home/[A-Za-z]|[A-Za-z]:\\Users\\|~/[A-Za-z.]")
+scan("email addresses", r"[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}")
+scan("likely tokens",
+     r"gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9_-]{20,}"
+     r"|AKIA[0-9A-Z]{16}|xox[abprs]-[A-Za-z0-9-]{10,}|-----BEGIN [A-Z ]*PRIVATE KEY")
+scan("cross-repo issue/PR references", r"(?<![\w./-])([\w.-]+/[\w.-]+)#\d+",
+     keep=lambda m: m.group(1).lower() not in placeholders | {this_repo})
+scan("github.com URLs to other repos", r"github\.com/([\w.-]+/[\w.-]+)",
+     keep=lambda m: m.group(1).lower().removesuffix(".git") not in placeholders | {this_repo},
+     flags=re.I)
+
+if os.path.isfile(terms_file):
+    terms = [t.strip() for t in open(terms_file, encoding="utf-8") if t.strip() and not t.startswith("#")]
+    if terms:
+        scan("private terms (from %s)" % terms_file,
+             "|".join(re.escape(t) for t in terms), flags=re.I)
+    else:
+        print("ok   private terms file %s is empty; nothing to check" % terms_file)
+else:
+    print("ok   private terms check skipped: %s not found (it only runs locally, never in CI)" % terms_file)
+PY
+)"
+leak_rc=$?
+while IFS= read -r line; do
+  case "$line" in
+    "ok   "*) echo "$line" ;;
+    "FAIL "*) fail "${line#FAIL }" ;;
+    *) fail "leak check: $line" ;;
+  esac
+done <<< "$leak_out"
+[ "$leak_rc" -eq 0 ] || fail "leak check script exited with $leak_rc"
 
 if [ "$failures" -gt 0 ]; then
   echo "$failures check(s) failed"
