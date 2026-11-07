@@ -27,6 +27,18 @@ check() { # expected_exit command
   got=$?
   if [ "$got" -eq "$expected" ]; then echo "ok   $got  $cmd"; else echo "FAIL $got (want $expected)  $cmd"; fail=1; fi
 }
+check_ask() { # command: a plain gh pr merge must exit 0 with an "ask" decision on stdout
+  local cmd=$1 out got
+  out="$(printf '{"cwd":%s,"tool_input":{"command":%s}}' \
+    "$(jq -Rn --arg v "$tmp" '$v')" "$(jq -Rn --arg v "$cmd" '$v')" \
+    | python3 -I "$hook" 2>/dev/null)"
+  got=$?
+  if [ "$got" -eq 0 ] && [ "$(printf '%s' "$out" | jq -r '.hookSpecificOutput | "\(.hookEventName) \(.permissionDecision)"' 2>/dev/null)" = "PreToolUse ask" ]; then
+    echo "ok   ask $cmd"
+  else
+    echo "FAIL $got, no ask decision (want ask)  $cmd"; fail=1
+  fi
+}
 check_raw() { # expected_exit raw_stdin: malformed hook input must still block
   local expected=$1 input=$2 got
   printf '%s' "$input" | python3 -I "$hook" 2>/dev/null
@@ -110,7 +122,17 @@ check 2 'gh api repos/o/r/pulls/$N/comments'
 check 2 'gh api repos/o/r/pulls/`echo 1`/comments'
 check 2 'env gh alias set g api'
 check 2 "bash -c 'gh alias set g api'"
-check 2 'gh pr merge 1'
+# Merging asks the owner: a plain gh pr merge returns an "ask" decision.
+check_ask 'gh pr merge 1'
+check_ask 'gh pr merge 26 --repo o/r --squash --delete-branch'
+check_ask 'gh pr merge --merge --auto 26'
+# A chained, redirected or wrapped merge is still blocked.
+check 2 'git status && gh pr merge 1'
+check 2 'gh pr merge 1; echo done'
+check 2 'gh pr merge 1 > out.txt'
+check 2 'gh pr merge $PR'
+check 2 "bash -c 'gh pr merge 1'"
+check 2 'env gh pr merge 1'
 check 2 'gh repo delete o/r'
 check 2 'gh extension install x/y'
 # Allowed: the gh commands the skills and docs tell agents to run.

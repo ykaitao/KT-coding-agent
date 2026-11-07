@@ -45,10 +45,14 @@ def check_gh(seg, cmd):
     # runs. Single-quoted text (such as a jq filter) isn't expanded, so it's ignored.
     if re.search(r"\$[({A-Za-z_0-9]|`", re.sub(r"'[^']*'", "", cmd)):
         block("shell expansion in a gh command; write its arguments out literally")
+    merge = False
     for i in starts:
         args = seg[i + 1:]
         words = [a for a in args if not a.startswith("-")]
         sub = words[0] if words else ""
+        if sub == "pr" and len(words) > 1 and words[1] == "merge":
+            merge = True  # the caller turns a plain merge into an "ask"
+            continue
         if sub not in GH_ALLOWED:
             block(f"gh {sub or args[:1]} is not allowed for agents")
         allowed = GH_ALLOWED[sub]
@@ -60,6 +64,7 @@ def check_gh(seg, cmd):
             flags = set(args)
             if not ({"--comment", "-c"} & flags) or {"--approve", "-a", "--request-changes", "-r"} & flags:
                 block("gh pr review without --comment")
+    return merge
 
 def main():
     data = json.load(sys.stdin)
@@ -79,14 +84,30 @@ def main():
         segments = split_segments(cmd)
     except ValueError:
         block("could not parse the command")
+    merge = False
     for seg in segments:
-        check_gh(seg, cmd)
+        merge = check_gh(seg, cmd) or merge
         # A shell's -c string or eval runs as its own command line.
         if seg and os.path.basename(seg[0]) in {"bash", "sh", "zsh", "eval"}:
             for inner in seg[1:]:
                 if re.search(r"\bgh\b", inner):
                     for inner_seg in split_segments(inner):
-                        check_gh(inner_seg, inner)
+                        if check_gh(inner_seg, inner):
+                            block("gh pr merge must be run on its own, not through a shell")
+
+    # Merging is the owner's decision: a plain `gh pr merge` asks the user instead of
+    # being blocked. Chained, redirected or wrapped merges are still blocked.
+    if merge:
+        if len(segments) != 1 or re.search(r"\|\||[;&|<>`\n]|\$\(", cmd) or os.path.basename(segments[0][0]) != "gh":
+            block("gh pr merge must be run on its own, not chained or wrapped")
+        if any("graphql" in t.lower() for t in segments[0]):
+            block("GraphQL is not allowed for agents; use the REST endpoints")
+        print(json.dumps({"hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": "ask",
+            "permissionDecisionReason": "Merging needs the owner's approval",
+        }}))
+        sys.exit(0)
 
     # Normalize --flag=value and -fVALUE / -FVALUE / -XVALUE into flag, value.
     tokens = []
