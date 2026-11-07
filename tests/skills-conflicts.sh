@@ -1,110 +1,102 @@
 #!/usr/bin/env bash
-# Reports conflicts between this repo's skills and the user's own skills:
-#   1. same name: which copy each provider loads
-#   2. near-duplicate descriptions: word overlap (Jaccard) at or above a threshold
-# Read-only. From each user skill it reads only the name and description in the
-# SKILL.md frontmatter, and it prints only names, paths and scores.
-# Usage: bash tests/skills-conflicts.sh [--strict] [--threshold N] [--repo-skills DIR] [--user-dirs DIR:DIR...]
-# User dirs default to $KT_SKILLS_USER_DIRS, or else ~/.claude/skills, ~/.codex/skills,
-# ~/.agents/skills and ~/.copilot/skills. Exits 0 with warnings; with --strict, exits 1
-# if any skill name collides.
+# Reports skills in the user's own skill folders that have the same name as one of this
+# repo's skills, and says which copy each provider loads.
+# A user skill matches when its folder name or its frontmatter name equals a repo
+# skill's folder name or frontmatter name.
+# It doesn't look for near-duplicate descriptions: word overlap scored distinct skills
+# higher than a reworded copy, so it can't tell them apart.
+# Read-only. From each user skill it reads only the name in the SKILL.md frontmatter,
+# and only when the frontmatter is closed by a --- line. It prints only names and paths.
+# Usage: bash tests/skills-conflicts.sh [--strict] [--repo-skills DIR] [--user-dirs DIR:DIR...]
+# User dirs default to $KT_SKILLS_USER_DIRS, or else ~/.claude/skills, ~/.agents/skills
+# and ~/.copilot/skills. Exits 0 with warnings; with --strict, exits 1 if any name collides.
 set -u
 
+usage() { echo "usage: bash tests/skills-conflicts.sh [--strict] [--repo-skills DIR] [--user-dirs DIR:DIR...]" >&2; exit 2; }
 root="$(cd "$(dirname "$0")/.." && pwd -P)"
 repo_skills="$root/skills"
-user_dirs="${KT_SKILLS_USER_DIRS:-$HOME/.claude/skills:$HOME/.codex/skills:$HOME/.agents/skills:$HOME/.copilot/skills}"
+user_dirs="${KT_SKILLS_USER_DIRS:-$HOME/.claude/skills:$HOME/.agents/skills:$HOME/.copilot/skills}"
 strict=0
-threshold=0.5
 while [ $# -gt 0 ]; do
   case "$1" in
     --strict) strict=1 ;;
-    --threshold) threshold=${2:?--threshold needs a value}; shift ;;
-    --repo-skills) repo_skills=${2:?--repo-skills needs a directory}; shift ;;
-    --user-dirs) user_dirs=${2:?--user-dirs needs a colon-separated list}; shift ;;
-    *) echo "unknown option: $1" >&2; exit 2 ;;
+    --repo-skills) [ $# -ge 2 ] || usage; repo_skills=$2; shift ;;
+    --user-dirs) [ $# -ge 2 ] || usage; user_dirs=$2; shift ;;
+    *) echo "unknown option: $1" >&2; usage ;;
   esac
   shift
 done
 
-python3 -I - "$repo_skills" "$user_dirs" "$strict" "$threshold" <<'PY'
-import os, re, sys
+python3 -I - "$repo_skills" "$user_dirs" "$strict" <<'PY'
+import os, sys
 
-repo_dir, user_dirs, strict, threshold = sys.argv[1], sys.argv[2], sys.argv[3] == "1", float(sys.argv[4])
+repo_dir, user_dirs, strict = sys.argv[1], sys.argv[2], sys.argv[3] == "1"
 
 # Which copy wins on a same-name collision, by the provider that reads the user folder.
-# Source: the provider table in issue #32 (Claude Code skills docs, Codex skills docs;
-# Copilot's rule isn't documented).
+# Source: the provider table in issue 32 (Claude Code and Codex skills docs; Copilot's
+# rule isn't documented).
 WINNER = {
     ".claude": "Claude Code loads the personal copy; it overrides the repo's",
-    ".codex": "Codex shows both copies; it doesn't merge them",
-    ".agents": "Codex shows both copies; Copilot's rule isn't documented",
+    ".agents": "Codex doesn't merge them, so both copies can appear; Copilot's rule isn't documented",
     ".copilot": "Copilot's rule isn't documented",
 }
-STOP = set("a an and are as at be by for from in into is it its of on or the this that to use used when with you your".split())
+MAX_LINES = 40
 
-def front(path):
-    """Name and description from the SKILL.md frontmatter; stops at the closing ---."""
-    name = desc = None
+def front_name(path):
+    """The frontmatter name, or None. Reads only up to the closing --- and never the body."""
     with open(path, encoding="utf-8", errors="replace") as f:
         if f.readline().strip() != "---":
-            return None, None
-        key = None
-        for n, line in enumerate(f):
-            if line.strip() == "---" or n >= 40:
-                break  # never read past the frontmatter
-            if line[:1].isspace() and key == "description":
-                desc = (desc or "") + " " + line.strip()
-                continue
-            key, _, value = line.partition(":")
-            key, value = key.strip(), value.strip().strip("'\"")
-            if key == "name":
-                name = value
-            elif key == "description":
-                desc = "" if value in (">", "|", ">-", "|-") else value
-    return name, desc
+            return None
+        lines = []
+        for _ in range(MAX_LINES):
+            line = f.readline()
+            if not line:
+                return None  # no closing ---: treat as no frontmatter
+            if line.strip() == "---":
+                break
+            lines.append(line)
+        else:
+            return None  # not closed within the limit: treat as no frontmatter
+    for line in lines:
+        if not line[:1].isspace() and line.partition(":")[0].strip() == "name":
+            return line.partition(":")[2].strip().strip("'\"") or None
+    return None
 
 def skills(d):
-    out = {}
+    """[(folder, frontmatter name or None, path)] for each skill folder in d."""
+    out = []
     if not os.path.isdir(d):
         return out
     for entry in sorted(os.listdir(d)):
         path = os.path.join(d, entry, "SKILL.md")
         if os.path.isfile(path):
-            name, desc = front(path)
-            out[name or entry] = (os.path.join(d, entry), desc or "")
+            out.append((entry, front_name(path), os.path.join(d, entry)))
     return out
-
-def words(text):
-    return {w for w in re.findall(r"[a-z0-9]+", text.lower()) if len(w) > 2 and w not in STOP}
 
 def provider(d):
     parent = os.path.basename(os.path.dirname(os.path.abspath(d)))
-    return WINNER.get(parent, "unknown provider for this folder; check its docs")
+    return WINNER.get(parent, "not a documented skills folder for Claude Code, Codex or Copilot; check your provider's docs")
 
 repo = skills(repo_dir)
+repo_names = {}
+for folder, name, path in repo:
+    for key in {folder, name} - {None}:
+        repo_names.setdefault(key, path)
 repo_real = os.path.realpath(repo_dir)
-collisions = similar = 0
+collisions = 0
 dirs = [d for d in user_dirs.split(":") if d]
 for d in dirs:
     if os.path.realpath(d) == repo_real:
         continue
-    for uname, (upath, udesc) in skills(d).items():
+    for folder, name, upath in skills(d):
         if os.path.realpath(upath).startswith(repo_real + os.sep):
             continue  # a link back to this repo's own skill, not a second copy
-        if uname in repo:
+        hits = sorted({k for k in (folder, name) if k in repo_names})
+        if hits:
             collisions += 1
-            print(f"WARN same name: {uname}: {upath} and {repo[uname][0]}. {provider(d)}.")
-            continue
-        uw = words(udesc)
-        for rname, (rpath, rdesc) in repo.items():
-            rw = words(rdesc)
-            if uw and rw:
-                score = len(uw & rw) / len(uw | rw)
-                if score >= threshold:
-                    similar += 1
-                    print(f"WARN similar description ({score:.2f}): {uname} ({upath}) and {rname} ({rpath})")
+            how = "folder and name" if folder in hits and name in hits else ("folder" if folder in hits else "name")
+            print(f"WARN same name ({how}): {hits[0]}: {upath} and {repo_names[hits[0]]}. {provider(d)}.")
 
-print(f"skills conflicts: {len(repo)} repo skills, {len(dirs)} user folders, "
-      f"{collisions} same-name, {similar} similar")
+print(f"skills conflicts: {len(repo)} repo skills, {len(dirs)} user folders, {collisions} same-name")
 sys.exit(1 if strict and collisions else 0)
 PY

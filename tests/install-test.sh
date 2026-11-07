@@ -113,7 +113,7 @@ printf -- '---\nname: pr-review-loop\ndescription: My own.\n---\n' > "$tmp/home/
 t="$(new_repo conflict)"
 out="$(bash "$installer" "$t" 2>&1)"; code=$?
 check "conflict: exit 0 (warning only)" [ "$code" -eq 0 ]
-check "conflict: same-name warning printed" grep -q "WARN same name: pr-review-loop" <<<"$out"
+check "conflict: same-name warning printed" grep -q "WARN same name (folder and name): pr-review-loop" <<<"$out"
 check "conflict: Claude Code winner named" grep -q "Claude Code loads the personal copy" <<<"$out"
 rm -rf "$tmp/home"
 
