@@ -21,7 +21,8 @@ Keep the loop bounded: only must-fix issues keep it going. After 4 rounds, repor
 After each round, judge each agent's work. If something went wrong, improve the skill or the brief before the next round. If the work went well and the task will recur, propose a new skill. If the reviewer dropped a concern you raised, or the implementer skipped tests, fix the skill, not just the next brief.
 
 ## Finish
-- Report to the owner: rounds run, final review URL, and anything left unverified. Merge only on their word.
+- A PR isn't ready to merge until its checks pass. Confirm it with `gh pr checks <n> --repo <owner/repo>` at the final head before asking the owner to merge. If a check fails, send the failure to implement as another round. If checks are pending, wait (`gh pr checks <n> --repo <owner/repo> --watch`) before asking.
+- Report to the owner: rounds run, final review URL, check results, and anything left unverified. Merge only on their word.
 - After the merge, run `git fetch --prune`, remove any worktrees for the branch, fast-forward the default branch, then `git branch -d <branch>` (`-D` after a squash or rebase merge, once GitHub shows the PR as merged).
 
 ## Rules
