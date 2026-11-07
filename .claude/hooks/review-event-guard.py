@@ -1,10 +1,65 @@
 #!/usr/bin/env python3
 # PreToolUse hook: allow PR reviews only with event COMMENT. Fails closed.
+# It's a guardrail against mistakes and casual bypasses, not a sandbox. Known gaps:
+# a gh alias set before the hook was installed, a gh binary whose name is built by
+# shell expansion, and API calls made without gh (for example curl).
 import json, os, re, shlex, sys
 
 def block(why):
     print(f"Blocked: {why}. PR reviews may only be posted with event COMMENT.", file=sys.stderr)
     sys.exit(2)
+
+# gh subcommands agents may run. Anything else, including gh alias and unknown
+# aliases, is blocked, because an alias can hide an api or graphql call.
+GH_ALLOWED = {
+    "api": None,
+    "auth": {"status"},
+    "issue": {"view", "list", "create", "comment"},
+    "pr": {"view", "diff", "checks", "list", "create", "review", "update-branch", "checkout", "comment", "edit"},
+    "repo": {"view"},
+    "run": {"view", "list"},
+}
+
+def split_segments(cmd):
+    """Split a command line into simple commands at ; & | && || ( ) and newlines."""
+    lex = shlex.shlex(cmd.replace("\n", " ; "), posix=True, punctuation_chars=";&|()")
+    lex.whitespace_split = True
+    segments, cur = [], []
+    for tok in lex:
+        if tok and set(tok) <= set(";&|()"):
+            if cur:
+                segments.append(cur)
+            cur = []
+        else:
+            cur.append(tok)
+    if cur:
+        segments.append(cur)
+    return segments
+
+def check_gh(seg, cmd):
+    """Allowlist gh subcommands, and block shell expansion and GraphQL in gh calls."""
+    starts = [i for i, t in enumerate(seg) if os.path.basename(t) == "gh"]
+    if not starts:
+        return
+    # A gh call whose arguments come from shell expansion can't be known before it
+    # runs. Single-quoted text (such as a jq filter) isn't expanded, so it's ignored.
+    if re.search(r"\$[({A-Za-z_0-9]|`", re.sub(r"'[^']*'", "", cmd)):
+        block("shell expansion in a gh command; write its arguments out literally")
+    for i in starts:
+        args = seg[i + 1:]
+        words = [a for a in args if not a.startswith("-")]
+        sub = words[0] if words else ""
+        if sub not in GH_ALLOWED:
+            block(f"gh {sub or args[:1]} is not allowed for agents")
+        allowed = GH_ALLOWED[sub]
+        if allowed is not None and (len(words) < 2 or words[1] not in allowed):
+            block(f"gh {sub} {words[1] if len(words) > 1 else ''} is not allowed for agents".replace("  ", " "))
+        if any("graphql" in a.lower() for a in args):
+            block("GraphQL is not allowed for agents; use the REST endpoints")
+        if sub == "pr" and words[1] == "review":
+            flags = set(args)
+            if not ({"--comment", "-c"} & flags) or {"--approve", "-a", "--request-changes", "-r"} & flags:
+                block("gh pr review without --comment")
 
 def main():
     data = json.load(sys.stdin)
@@ -15,12 +70,23 @@ def main():
         block("hook input has no command string")
     cwd = data.get("cwd", ".")
 
-    if not re.search(r"review|graphql", cmd, re.I):
+    # Quotes and backslashes don't change what the shell runs (rev''iews is reviews),
+    # so the fast path looks at the command without them.
+    if not re.search(r"review|graphql|\bgh\b", re.sub(r"[\"'\\]", "", cmd), re.I):
         sys.exit(0)
     try:
         raw = shlex.split(cmd)
+        segments = split_segments(cmd)
     except ValueError:
         block("could not parse the command")
+    for seg in segments:
+        check_gh(seg, cmd)
+        # A shell's -c string or eval runs as its own command line.
+        if seg and os.path.basename(seg[0]) in {"bash", "sh", "zsh", "eval"}:
+            for inner in seg[1:]:
+                if re.search(r"\bgh\b", inner):
+                    for inner_seg in split_segments(inner):
+                        check_gh(inner_seg, inner)
 
     # Normalize --flag=value and -fVALUE / -FVALUE / -XVALUE into flag, value.
     tokens = []
@@ -31,17 +97,6 @@ def main():
             tokens += [t[:2], t[2:]]
         else:
             tokens.append(t)
-
-    # GraphQL is denied outright: the loop only needs REST, and parsing GraphQL
-    # documents for review events kept losing to encodings and comments.
-    is_gh_api = "api" in tokens and any(os.path.basename(t) == "gh" for t in tokens)
-    if is_gh_api and any("graphql" in t.lower() for t in tokens):
-        block("GraphQL is not allowed for agents; use the REST endpoints")
-
-    # gh pr review: only --comment / -c is allowed.
-    if "gh" in tokens and "pr" in tokens and "review" in tokens:
-        if not ({"--comment", "-c"} & set(tokens)) or {"--approve", "-a", "--request-changes", "-r"} & set(tokens):
-            block("gh pr review without --comment")
 
     if not any(re.search(r"pulls/.*reviews", t, re.I) for t in tokens):
         sys.exit(0)

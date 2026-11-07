@@ -14,6 +14,7 @@ echo 'mutation { addPullRequestReview(input:{pullRequestId:"X", event:COMMENT}) 
 echo 'query { repository(owner:"o", name:"r") { pullRequest(number:1) { reviews(first:5) { nodes { state } } } } }' > "$tmp/qr.graphql"
 echo '{"query":"mutation($e: PullRequestReviewEvent!) { submitPullRequestReview(input:{pullRequestReviewId:\"X\", event:$e}) { clientMutationId } }","variables":{"e":"APPROVE"}}' > "$tmp/ga.json"
 echo '{"query":"query { viewer { login } }"}' > "$tmp/gr.json"
+cp "$tmp/ga.json" "$tmp/q.json"
 printf '%s\n' '{"query": "\u006dutation { addPullRequestReview(input:{pullRequestId:\"X\", event:APPROVE}) { clientMutationId } }"}' > "$tmp/esc.json"
 printf 'mutation { addPullRequestReview(input:{pullRequestId:"X", body:"event:COMMENT", event#x\n:APPROVE}) { clientMutationId } }\n' > "$tmp/decoy.graphql"
 
@@ -92,6 +93,42 @@ check 2 'gh api graphql --input gr.json'
 check 2 'gh api graphql -f query="query { viewer { login } }"'
 check 2 'gh api -X GET graphql'
 grep -q 'u006d' "$tmp/esc.json" || { echo "FAIL esc.json lost its \\u escape"; fail=1; }
+# Quote and backslash splitting: the shell still sees reviews and graphql.
+check 2 "gh api repos/o/r/pulls/1/rev''iews -X POST -f event=APPROVE"
+check 2 'gh api repos/o/r/pulls/1/rev""iews/9/events -X POST -f event=APPROVE'
+check 2 "gh pr rev''iew 1 --approve"
+check 2 "gh api gr''aphql --input q.json"
+check 2 'gh api graph\ql --input q.json'
+# gh aliases and shell expansion can hide api and graphql, so they're blocked.
+check 2 'gh alias set g api'
+check 2 'gh g graphql --input q.json'
+check 2 "gh alias set gq 'api graphql'"
+check 2 'gh gq --input q.json'
+check 2 'gh api "$(printf gr)aphql" --input q.json'
+check 2 'e=graph; gh api ${e}ql --input q.json'
+check 2 'gh api repos/o/r/pulls/$N/comments'
+check 2 'gh api repos/o/r/pulls/`echo 1`/comments'
+check 2 'env gh alias set g api'
+check 2 "bash -c 'gh alias set g api'"
+check 2 'gh pr merge 1'
+check 2 'gh repo delete o/r'
+check 2 'gh extension install x/y'
+# Allowed: the gh commands the skills and docs tell agents to run.
+check 0 'gh api --paginate repos/o/r/pulls/1/comments --jq '"'"'.[] | {id, line, path, body, in_reply_to_id}'"'"
+check 0 'gh api repos/o/r/pulls/1/comments/9/replies -f body=Fixed'
+check 0 'gh api "repos/o/r/contents/README.md?ref=abc123" --jq .content | base64 -d | sed -n '"'"'5p'"'"
+check 0 'gh api repos/o/r/pulls/1/reviews -X POST --input c.json'
+check 0 'gh auth status'
+check 0 'gh pr checkout 1'
+check 0 'gh pr checks 1 --repo o/r --watch'
+check 0 'gh pr diff 1 --repo o/r'
+check 0 'gh pr update-branch 1 --repo o/r'
+check 0 'gh pr view 1 --repo o/r --json headRefOid -q .headRefOid'
+check 0 'gh pr review 1 --comment -b ok'
+check 0 'gh issue comment 10 --repo o/r --body-file note.md'
+check 0 'gh pr create --repo o/r --base master --head x --title t --body-file b.md'
+check 0 'git log --oneline -1 && gh pr checks 1 --repo o/r'
+check 0 'git commit -m "mention gh alias in a message"'
 # Mentioning graphql outside gh api is fine.
 check 0 'grep -rn graphql docs'
 
