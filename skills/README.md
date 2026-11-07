@@ -30,6 +30,6 @@ Record each check:
 
 | Date | Provider | Version | Result |
 | --- | --- | --- | --- |
-| 2026-11-07 | Claude Code (desktop app) | Opus 5.5 | All three skills listed |
+| 2026-11-07 | Claude Code (desktop app) | 2.1.226 | All three skills listed (model: Opus 5.5) |
 | 2026-11-07 | Codex CLI | 0.145.0 | Not run: default model `gpt-6-luna` unsupported with a ChatGPT account |
 | | GitHub Copilot (VS Code) | | Not yet checked |

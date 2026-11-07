@@ -46,10 +46,19 @@ try:
 except ValueError:
     sys.exit("frontmatter is not closed with ---")
 fields = {}
+key = None
 for line in lines[1:end]:
     if ":" in line and not line[:1].isspace():
         key, _, value = line.partition(":")
-        fields[key.strip()] = value.strip().strip("'\"")
+        key = key.strip()
+        fields[key] = value.strip().strip("'\"")
+    elif key and line[:1].isspace():
+        # Continuation of a block scalar (> or |) or a folded plain value.
+        fields[key] += " " + line.strip()
+for key, value in fields.items():
+    # For a block scalar the value is the continuation lines, not the indicator.
+    if value[:1] in (">", "|"):
+        fields[key] = value.split(" ", 1)[1].strip() if " " in value else ""
 if fields.get("name") != folder:
     sys.exit("name is %r, expected %r" % (fields.get("name"), folder))
 if not fields.get("description"):
@@ -62,8 +71,12 @@ PY
   fi
 done
 
-# 3. README list matches the skill folders.
-listed="$(sed -n 's/^- \[`\([^`]*\)`\].*/\1/p' "$skills_dir/README.md")"
+# 3. README list matches the skill folders. Only the "## Skills" section counts.
+section="$(awk '/^## /{in_list = ($0 == "## Skills"); next} in_list' "$skills_dir/README.md")"
+listed="$(printf '%s\n' "$section" | sed -n 's/^- \[`\([^`]*\)`\].*/\1/p')"
+for name in $(printf '%s\n' "$listed" | sort | uniq -d); do
+  fail "README lists $name more than once"
+done
 for name in $listed; do
   if [ -f "$skills_dir/$name/SKILL.md" ]; then
     ok "README lists $name, which exists"
