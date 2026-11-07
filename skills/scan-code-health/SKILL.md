@@ -9,15 +9,15 @@ Read-only. The only file you write is the report, at the path the user names; do
 
 ## Input
 - A repository checkout.
-- A **path or glob to scan**, named by the user (for example `src/billing/` or `.claude/hooks/*.py`). Don't pick the scope yourself. If none is given, ask.
+- A **path or glob to scan**, named by the user (for example `src/billing/` or `lib/**/*.js`). Don't pick the scope yourself. If none is given, ask.
 - A **report path** to write to, named by the user. If none is given, ask.
 
 ## What to look for
-Only the code-health dimension:
-- **Correctness bugs:** wrong conditions, off-by-one errors, unhandled edge cases (empty input, `None`, zero), shared mutable state, wrong return values.
+The skill isn't tied to one language: apply the same checks to whatever languages the scanned files use, in that language's terms. Only the code-health dimension:
+- **Correctness bugs:** wrong conditions, off-by-one errors, unhandled edge cases (empty input, null or `None`, zero), shared mutable state, wrong return values.
 - **Dead code:** functions, branches or variables that nothing reaches or uses. Confirm with a search across the repo, not just the scanned path.
 - **Duplicated code:** logic repeated closely enough that a fix to one copy would need the same fix in another.
-- **Missing error handling:** errors swallowed silently (for example a bare `except: pass`), and resources or calls that fail with no handling where a caller would need it.
+- **Missing error handling:** errors swallowed silently (for example a bare `except: pass` in Python, or a `catch` that discards the error in JavaScript), and resources or calls that fail with no handling where a caller would need it.
 
 Leave out style, naming, formatting, architecture, performance, cost, security and accessibility. Those are other dimensions.
 
@@ -29,7 +29,7 @@ Leave out style, naming, formatting, architecture, performance, cost, security a
 5. Write the report.
 
 ## Report format
-One Markdown file at the report path. Use this structure exactly: the headings, field labels and their order are fixed, because later steps parse them.
+One Markdown file at the report path. The example finding is JavaScript; a Python finding looks the same, with a `python` code block and a Python command. Use this structure exactly: the headings, field labels and their order are fixed, because later steps parse them.
 
 ````markdown
 # Code-health scan: <path or glob>
@@ -39,13 +39,13 @@ Scanned at commit <short SHA> on <date>. Files scanned: <n>.
 ## Findings (<count>)
 
 ### 1. <one-line claim>
-- **File:** `path/to/file.py:42`
+- **File:** `src/stats.js:42`
 - **Severity:** high | medium | low
 - **Evidence:**
-  ```python
-  return total / len(items)
+  ```javascript
+  return total / scores.length;
   ```
-  `average([])` raises `ZeroDivisionError`; `python3 -c "from m import average; average([])"` exits 1.
+  `average([])` returns `NaN`: `node -e "console.log(require('./src/stats').average([]))"` prints `NaN`.
 ````
 
 Severity:
