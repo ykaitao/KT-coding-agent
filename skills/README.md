@@ -9,6 +9,7 @@ The skills live here. `.agents/skills`, `.claude/skills` and `.github/skills` ar
 - [`pr-review-loop`](pr-review-loop/SKILL.md): the manager's loop that alternates review and implement rounds until a review is clean.
 - [`pr-inline-review`](pr-inline-review/SKILL.md): review a PR with line-checked inline comments.
 - [`pr-address-review`](pr-address-review/SKILL.md): address review comments, push, and reply in each thread.
+- [`system-design-review`](system-design-review/SKILL.md): check designs and changes that touch stored data against principles for access, transactions, migrations, caches and cost.
 - [`scan-code-health`](scan-code-health/SKILL.md): read-only scan of a named path for code-health problems, written as an evidence-backed report.
 - [`github-markdown-editing`](github-markdown-editing/SKILL.md): write and edit GitHub comments, descriptions and reviews so their Markdown renders correctly.
 - [`branch-worktree-cleanup`](branch-worktree-cleanup/SKILL.md): audit branches and worktrees, keep useful unmerged work, and safely remove stale local state.
