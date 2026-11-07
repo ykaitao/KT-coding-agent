@@ -5,6 +5,10 @@
 #   3. skills/README.md lists exactly the skills that exist
 #   4. no file under skills/ leaks home paths, emails, tokens, other repos'
 #      issue/PR references or URLs, or (locally) terms from a private list
+#   5. no file under skills/ tells an agent to do something dangerous: pipe to a
+#      shell, rm -rf a variable or /, bypass guards or hooks, force-push a
+#      default branch, run base64-decoded code, or follow injected instructions.
+#      A line that warns against the pattern (never, do not, avoid, ...) is allowed.
 # Run from anywhere: bash tests/skills-check.sh
 # Private terms: one per line in $SKILLS_PRIVATE_TERMS
 # (default ~/.config/kt-coding-agent/private-terms.txt). Never commit that file.
@@ -150,6 +154,39 @@ scan("github.com URLs to other repos", r"github\.com/([\w.-]+/[\w.-]+)",
      keep=lambda m: m.group(1).split("/")[0].lower() not in github_pages
                    and m.group(1).lower().removesuffix(".git") not in placeholders | {this_repo},
      flags=re.I)
+
+# Dangerous instructions: things an agent should never be told to do.
+# A line that clearly warns against the pattern is allowed: it has a warning
+# word (never, do not, don.t, must not, avoid, forbidden) outside the match.
+WARNING = re.compile(r"\b(never|do not|don.t|must not|mustn.t|avoid|forbidden|instead of)\b", re.I)
+def warns(m):
+    line = m.string
+    return bool(WARNING.search(line[:m.start()] + " " + line[m.end():]))
+danger = lambda m: not warns(m)
+scan("pipe-to-shell instructions",
+     r"\b(curl|wget)\b[^|\n]*\|\s*(sudo\s+)?(ba|z|da|k)?sh\b", keep=danger)
+scan("rm -rf on a variable or /",
+     r"\brm\s+(-[A-Za-z]*[rR][A-Za-z]*\s+|-[A-Za-z]+\s+-[rR]\s+)+(\"?\$\{?\w|/(?=[\s*\"]|$))",
+     keep=danger)
+scan("guard bypasses",
+     r"--no-verify|dangerouslyDisableSandbox|--dangerously-skip-permissions"
+     r"|\b(edit|modify|overwrite|delete|remove|disable|rm)\b[^\n]{0,30}\.claude/settings"
+     r"|(?<![\w>])>>?\s*\S*\.claude/settings"
+     r"|\b(remove|delete|disable|bypass|turn off|skip)\s+(the\s+)?([\w-]+\s+)?hooks?\b",
+     keep=danger, flags=re.I)
+scan("force pushes to a default branch",
+     r"\bgit\s+push\b(?=[^\n]*(--force\b|--force-with-lease|\s-f\b|\s\+(main|master)\b))"
+     r"(?=[^\n]*\b(main|master)\b)[^\n]*", keep=danger)
+scan("base64-decoded execution",
+     r"base64\s+(-d|-D|--decode)\b[^\n]*\|\s*(sudo\s+)?(ba|z)?sh\b|\beval\b[^\n]*base64"
+     r"|base64\s+(-d|-D|--decode)\b[^\n]*\|\s*(python3?|perl|node|ruby)\b", keep=danger)
+scan("prompt-injection phrases",
+     r"\b(ignore|disregard|forget)\s+(all\s+|any\s+)?(the\s+)?(previous|prior|above|earlier|your)\s+"
+     r"(instructions|rules|prompts?|guidelines)\b"
+     r"|\byou are now (in )?(developer mode|DAN|jailbroken)\b"
+     r"|\b(do not|don.t) (tell|inform|notify) the (user|owner)\b"
+     r"|\bwithout (telling|asking|informing) the (user|owner)\b",
+     keep=danger, flags=re.I)
 
 if os.path.isfile(terms_file):
     terms = [t.strip() for t in open(terms_file, encoding="utf-8") if t.strip() and not t.startswith("#")]
