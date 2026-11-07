@@ -13,7 +13,7 @@ To run several PRs at once, give each one its own pair (for example `implement1`
 
 - Pick work whose PRs touch different files, and tell each implement session which files to stay out of.
 - Each implement session gets its own worktree and branch. Review sessions only read through `gh`, so they can share the main checkout and its settings.
-- Untracked files such as `.claude/settings.local.json` aren't copied into new worktrees, so a worktree session runs without that file's allow rules and hooks. Don't give a worktree session a task that relies on them, such as posting reviews.
+- Untracked files such as `.claude/settings.local.json` aren't copied into new worktrees, so a worktree session runs without that file's allow rules and without the review-event guard hook: nothing stops it from posting an `APPROVE` or `REQUEST_CHANGES` review, and its thread replies may need approval. Copy or symlink the file into the worktree before the session starts (newer Claude Code versions can also copy gitignored files listed in a `.worktreeinclude` file at the repo root).
 
 ## Loop
 1. Ask review to review PR `<n>` at its current head. Brief it with the repo, the PR, the head SHA, what changed since the last round, and "report the review URL, the number of actionable comments, and the line plus gist for each".
@@ -29,12 +29,12 @@ Keep the loop bounded: only must-fix issues keep it going. After 4 rounds, repor
 After each round, judge each agent's work. If something went wrong, improve the skill or the brief before the next round. If the work went well and the task will recur, propose a new skill. If the reviewer dropped a concern you raised, or the implementer skipped tests, fix the skill, not just the next brief.
 
 ## Finish
-- A PR opened before a CI workflow existed has no checks yet. After that workflow merges, run `gh pr update-branch <n> --repo <owner/repo>` so CI runs on the PR before you ask to merge it.
+- A PR opened before a CI workflow existed has no checks yet. After that workflow merges, run `gh pr update-branch <n> --repo <owner/repo>`, preferably before the last review round. It adds a merge commit, so the head moves: review the new head (at least the merged-in diff), confirm checks at that head, and tell implement to pull before its next push.
 - A PR isn't ready to merge until its checks pass. Confirm it with `gh pr checks <n> --repo <owner/repo>` at the final head before asking the owner to merge. If a check fails, send the failure to implement as another round. If checks are pending, wait (`gh pr checks <n> --repo <owner/repo> --watch`) before asking.
 - Report to the owner: rounds run, final review URL, check results, and anything left unverified. Merge only on their word.
 - After the merge, run `git fetch --prune`, remove any worktrees for the branch, fast-forward the default branch, then `git branch -d <branch>` (`-D` after a squash or rebase merge, once GitHub shows the PR as merged). Also delete the local branches that worktree sessions created (for example `claude/<name>`) once their worktrees are removed, and check `git branch -vv` for any marked `[gone]`.
 
 ## Rules
-- Run each `gh api` read of a PR's reviews as its own command. The guard hook blocks any command that combines a reviews request with other commands (`;`, `&&`, `|` and so on), even when every part only reads. It can also block a shell command whose text merely mentions a reviews endpoint, such as a heredoc that edits these docs; use a file-editing tool for those edits.
+- Run each `gh api` read of a PR's reviews as its own command. The guard hook treats a command that mentions a reviews endpoint as a write if any part uses a flag outside `gh api`'s read flags (for example `head -n` or `git log --oneline`), and then blocks it if it is chained (`;`, `&&`, `|` and so on). Chains whose parts use only read flags get through, so don't read a pass as the hook being broken. It can also block a shell command whose text merely mentions a reviews endpoint, such as a heredoc that edits these docs; use a file-editing tool for those edits.
 - Never approve, resolve threads, or merge on your own initiative.
 - Never report something to the owner that you haven't checked on GitHub.
