@@ -11,11 +11,14 @@ You orchestrate and are the owner's only point of contact: relay their decisions
 1. Ask review to review PR `<n>` at its current head. Brief it with the repo, the PR, the head SHA, what changed since the last round, and "report the review URL, the number of actionable comments, and the line plus gist for each".
 2. When review reports back, **check it**: fetch the review and its comments (`gh api --paginate .../pulls/<n>/comments`), confirm the head SHA and that each comment's `line` holds the text it's about.
    - If there are 0 actionable comments, the loop is done; go to "Finish".
-   - If posting was blocked by permissions, don't work around it, either yourself or through another agent. Tell the owner which permission rule is missing (see "Permissions" in `docs/WAY_OF_WORKING.md`). The owner talks only to you, so never ask them to answer inside another session.
+   - If review's post was blocked, read its saved draft, check every line yourself, and post it if your own permissions allow it. If you're blocked too, don't work around it: tell the owner which permission rule is missing (see "Permissions" in `docs/WAY_OF_WORKING.md`). The owner talks only to you, so never ask them to answer inside another session.
+   - Sessions started before a settings change may not pick it up. If they're still blocked after a rule is added, start fresh sessions.
 3. Send the comments (IDs, paths, lines, gists) to implement with the file scope and the rules: only touch these files, don't stage unrelated edits, and don't switch a shared checkout's branch (use a `git worktree` if needed).
-4. When implement reports back, **check it**: confirm the new PR head, the changed files, the edits and one reply per comment. Then go back to step 1.
+4. When implement reports back, **check it**: confirm the new PR head, the changed files, the edits and one reply per comment. For security fixes, rerun the tests yourself; don't rely on the report alone. Then go back to step 1.
 
-After each round, judge each agent's work. If something went wrong, improve the skill or the brief before the next round. If the work went well and the task will recur, propose a new skill.
+Keep the loop bounded: only must-fix issues keep it going. After 4 rounds, report to the owner what's left and ask whether to continue. Security code may need more rounds; say so when it does.
+
+After each round, judge each agent's work. If something went wrong, improve the skill or the brief before the next round. If the work went well and the task will recur, propose a new skill. If the reviewer dropped a concern you raised, or the implementer skipped tests, fix the skill, not just the next brief.
 
 ## Finish
 - Report to the owner: rounds run, final review URL, and anything left unverified. Merge only on their word.
