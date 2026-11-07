@@ -8,7 +8,10 @@
 #   5. no file under skills/ tells an agent to do something dangerous: pipe to a
 #      shell, rm -rf a variable or /, bypass guards or hooks, force-push a
 #      default branch, run base64-decoded code, or follow injected instructions.
-#      A line that warns against the pattern (never, do not, avoid, ...) is allowed.
+#      A line can opt out only with <!-- skills-check: allow -->. This is a lint for
+#      honest mistakes, not a defence: it scans line by line (joining lines that
+#      end in a backslash), so text split across lines or fences, Unicode
+#      lookalikes, or reworded instructions can pass.
 # Run from anywhere: bash tests/skills-check.sh
 # Private terms: one per line in $SKILLS_PRIVATE_TERMS
 # (default ~/.config/kt-coding-agent/private-terms.txt). Never commit that file.
@@ -125,9 +128,12 @@ for base, _, names in os.walk(skills_dir):
             continue
         files.append((os.path.relpath(path, os.path.dirname(skills_dir)), text))
 
-def scan(label, pattern, keep=lambda m: True, flags=0):
+def scan(label, pattern, keep=lambda m: True, flags=0, join=False):
     hits = []
     for rel, text in files:
+        if join:
+            # Join shell line continuations (later line numbers then shift up).
+            text = re.sub(r"\\\n[ \t]*", " ", text)
         for n, line in enumerate(text.splitlines(), 1):
             for m in re.finditer(pattern, line, flags):
                 if keep(m):
@@ -155,31 +161,29 @@ scan("github.com URLs to other repos", r"github\.com/([\w.-]+/[\w.-]+)",
                    and m.group(1).lower().removesuffix(".git") not in placeholders | {this_repo},
      flags=re.I)
 
-# Dangerous instructions: things an agent should never be told to do.
-# A line that clearly warns against the pattern is allowed: it has a warning
-# word (never, do not, don.t, must not, avoid, forbidden) outside the match.
-WARNING = re.compile(r"\b(never|do not|don.t|must not|mustn.t|avoid|forbidden|instead of)\b", re.I)
-def warns(m):
-    line = m.string
-    return bool(WARNING.search(line[:m.start()] + " " + line[m.end():]))
-danger = lambda m: not warns(m)
+# Dangerous instructions: things an agent should never be told to do. A line may
+# opt out only with an explicit marker, so prose cannot exempt itself by accident.
+ALLOW = "<!-- skills-check: allow -->"
+danger = lambda m: ALLOW not in m.string
 scan("pipe-to-shell instructions",
-     r"\b(curl|wget)\b[^|\n]*\|\s*(sudo\s+)?(ba|z|da|k)?sh\b", keep=danger)
+     r"\b(curl|wget)\b[^|\n]*\|\s*(sudo\s+)?((ba|z|da|k)?sh|python3?|perl|node|ruby)\b"
+     r"|\b(ba|z|da|k)?sh\b[^\n]*(\$\(|<\()\s*(curl|wget)\b", keep=danger, flags=re.I, join=True)
 scan("rm -rf on a variable or /",
-     r"\brm\s+(-[A-Za-z]*[rR][A-Za-z]*\s+|-[A-Za-z]+\s+-[rR]\s+)+(\"?\$\{?\w|/(?=[\s*\"]|$))",
-     keep=danger)
+     r"\brm\s+((-[A-Za-z]+|--[a-z-]+)\s+)*(-[A-Za-z]*[rR][A-Za-z]*|--recursive)\s+((-[A-Za-z]+|--[a-z-]+)\s+)*"
+     r"(\"?\$\{?\w|/(?=[\s*\"]|$)|~(?=[\s/\"]|$))",
+     keep=danger, join=True)
 scan("guard bypasses",
      r"--no-verify|dangerouslyDisableSandbox|--dangerously-skip-permissions"
      r"|\b(edit|modify|overwrite|delete|remove|disable|rm)\b[^\n]{0,30}\.claude/settings"
      r"|(?<![\w>])>>?\s*\S*\.claude/settings"
      r"|\b(remove|delete|disable|bypass|turn off|skip)\s+(the\s+)?([\w-]+\s+)?hooks?\b",
-     keep=danger, flags=re.I)
+     keep=danger, flags=re.I, join=True)
 scan("force pushes to a default branch",
-     r"\bgit\s+push\b(?=[^\n]*(--force\b|--force-with-lease|\s-f\b|\s\+(main|master)\b))"
-     r"(?=[^\n]*\b(main|master)\b)[^\n]*", keep=danger)
+     r"\bgit\s+push\b(?=[^\n]*(--force\b|--force-with-lease|\s-f\b|\s\+\S*\b(main|master)\b))"
+     r"(?=[^\n]*\b(main|master)\b)[^\n]*", keep=danger, join=True)
 scan("base64-decoded execution",
      r"base64\s+(-d|-D|--decode)\b[^\n]*\|\s*(sudo\s+)?(ba|z)?sh\b|\beval\b[^\n]*base64"
-     r"|base64\s+(-d|-D|--decode)\b[^\n]*\|\s*(python3?|perl|node|ruby)\b", keep=danger)
+     r"|base64\s+(-d|-D|--decode)\b[^\n]*\|\s*(python3?|perl|node|ruby)\b", keep=danger, join=True)
 scan("prompt-injection phrases",
      r"\b(ignore|disregard|forget)\s+(all\s+|any\s+)?(the\s+)?(previous|prior|above|earlier|your)\s+"
      r"(instructions|rules|prompts?|guidelines)\b"

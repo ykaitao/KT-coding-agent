@@ -19,6 +19,8 @@ jobs:
         run: bash tests/review-event-guard-test.sh
       - name: Skills check (structure and leaks)
         run: bash tests/skills-check.sh
+      - name: Danger-scan planted cases
+        run: bash tests/skills-danger-test.sh
 
   markdown-lint:
     runs-on: ubuntu-latest
