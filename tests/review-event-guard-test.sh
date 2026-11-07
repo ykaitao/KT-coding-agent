@@ -150,7 +150,20 @@ check 0 'gh pr review 1 --comment -b ok'
 check 0 'gh issue comment 10 --repo o/r --body-file note.md'
 check 0 'gh pr create --repo o/r --base master --head x --title t --body-file b.md'
 check 0 'git log --oneline -1 && gh pr checks 1 --repo o/r'
-check 0 'git commit -m "mention gh alias in a message"'
+# A gh word anywhere but the first word of a command is blocked, even in a message.
+check 2 'git commit -m "mention gh alias in a message"'
+check 0 'git commit -m "mention the GitHub CLI in a message"'
+# Wrappers hide the inner gh call, so any wrapped or quoted gh is blocked.
+check 2 "env bash -c 'gh pr merge 1'"
+check 2 "command eval 'gh pr merge 1'"
+check 2 "xargs -I{} sh -c 'gh pr merge {}'"
+check 2 "nohup sh -c 'gh pr review 1 --approve'"
+check 2 "env bash -c 'gh alias set g api'"
+check 2 "time bash -c 'gh api gr''aphql --input q.json'"
+check 2 'sudo gh pr merge 1'
+check 2 'exec gh pr merge 1'
+check 2 'nohup gh pr review 1 --approve'
+check 2 "eval 'gh pr view 1'"
 # Mentioning graphql outside gh api is fine.
 check 0 'grep -rn graphql docs'
 

@@ -2,7 +2,8 @@
 # PreToolUse hook: allow PR reviews only with event COMMENT. Fails closed.
 # It's a guardrail against mistakes and casual bypasses, not a sandbox. Known gaps:
 # a gh alias set before the hook was installed, a gh binary whose name is built by
-# shell expansion, and API calls made without gh (for example curl).
+# shell expansion, API calls made without gh (for example curl), and interpreters
+# that run gh themselves (for example python3 -c "os.system('gh pr merge 1')").
 import json, os, re, shlex, sys
 
 def block(why):
@@ -84,16 +85,18 @@ def main():
         segments = split_segments(cmd)
     except ValueError:
         block("could not parse the command")
+    # Fail closed on hidden gh calls: every "gh" word in the command, quoted or not,
+    # must be the first word of a simple command that is checked below. A gh behind a
+    # wrapper (env, nohup, time, command, xargs, sudo, exec), inside a sh/bash/zsh -c
+    # string or eval, or anywhere in an argument is blocked rather than unwrapped.
+    gh_words = len(re.findall(r"(?<![A-Za-z0-9_-])gh(?![A-Za-z0-9_-])", cmd))
+    gh_first = sum(1 for seg in segments if seg and os.path.basename(seg[0]) == "gh")
+    if gh_words != gh_first:
+        block("gh must be the first word of each command, not wrapped or quoted")
+
     merge = False
     for seg in segments:
         merge = check_gh(seg, cmd) or merge
-        # A shell's -c string or eval runs as its own command line.
-        if seg and os.path.basename(seg[0]) in {"bash", "sh", "zsh", "eval"}:
-            for inner in seg[1:]:
-                if re.search(r"\bgh\b", inner):
-                    for inner_seg in split_segments(inner):
-                        if check_gh(inner_seg, inner):
-                            block("gh pr merge must be run on its own, not through a shell")
 
     # Merging is the owner's decision: a plain `gh pr merge` asks the user instead of
     # being blocked. Chained, redirected or wrapped merges are still blocked.
