@@ -18,6 +18,12 @@ if [ -z "$target" ]; then
   echo "usage: bash install.sh [--dry-run] <target-repo-dir>" >&2
   exit 2
 fi
+for tool in git python3 jq; do
+  if ! command -v "$tool" >/dev/null 2>&1; then
+    echo "error: install.sh needs $tool (the guard hook and the checks use git, python3 and jq)" >&2
+    exit 1
+  fi
+done
 if [ ! -d "$target" ]; then
   echo "error: $target is not a directory" >&2
   exit 1
@@ -80,10 +86,12 @@ done
 # 3. Provider symlinks, refusing to replace a real skills directory.
 for d in .claude .agents .github; do
   link="$target/$d/skills"
-  if [ -e "$link" ] && [ ! -L "$link" ]; then
-    echo "skipped $d/skills: it is a real directory; move its contents into skills/ first"
-  elif [ -L "$link" ] && [ "$(readlink "$link")" = "../skills" ]; then
+  if [ -L "$link" ] && [ "$(readlink "$link")" = "../skills" ]; then
     echo "skipped $d/skills (symlink already in place)"
+  elif [ -L "$link" ]; then
+    echo "skipped $d/skills: it is a symlink to $(readlink "$link"), not ../skills; change it by hand"
+  elif [ -e "$link" ]; then
+    echo "skipped $d/skills: it exists and is not a symlink; move its contents into skills/ first"
   else
     do_ "link $d/skills -> ../skills" sh -c 'mkdir -p "$1" && ln -sfn ../skills "$1/skills"' _ "$target/$d"
   fi
