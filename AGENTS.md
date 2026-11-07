@@ -13,7 +13,7 @@ KT-coding-agent is a manager-led review and implement loop for AI coding agents,
 
 ## Rules for every agent
 
-- **Reviews are comment-only.** Post reviews with event `COMMENT`. Never approve, request changes, resolve threads or merge.
+- **Reviews are comment-only.** Post reviews with event `COMMENT`. Never approve or request changes. Never merge, resolve threads or push to the default branch on your own initiative; merge only on the owner's explicit word.
 - **Verify before reporting.** Re-fetch from GitHub (PR head SHA, comment lines, replies) and report only what you checked.
 - **Stay in your assigned files.** Don't stage unrelated local changes; use `git add <path>`, never `git add -A`. Don't switch the branch of a shared checkout; use a `git worktree`.
 - **Run the tests before pushing:**
