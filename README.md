@@ -1,29 +1,89 @@
-# KT-coding-agent: Autonomous Codebase Architecture & Optimization Agent
+# KT-coding-agent
 
-A multi-agent framework (work in progress) designed to autonomously analyze, optimize, and maintain complex application codebases. By launching a hierarchical swarm of specialized sub-agents, this system aims to bridge the gap between static analysis, intelligent system design, and automated software engineering.
+Helps developers deliver high-quality software faster with AI coding tools such as Claude Code, Codex and GitHub Copilot. Today it is a documented way of working: shared agent skills that run pull requests through review and implement rounds, plus guardrails and checks around them.
 
-## 🚀 Planned Features
+## What works today
 
-> **Status:** Early development. The features below are planned and not yet implemented.
+| Asset | What it does |
+| --- | --- |
+| [`skills/pr-review-loop`](skills/pr-review-loop/SKILL.md) | The manager's loop: alternate review and implement rounds on a PR until a review is clean, then merge on the owner's word. |
+| [`skills/pr-inline-review`](skills/pr-inline-review/SKILL.md) | Review a PR and post line-checked inline comments as one `COMMENT` review. |
+| [`skills/pr-address-review`](skills/pr-address-review/SKILL.md) | Address review comments, push, and reply in each thread. |
+| [`docs/WAY_OF_WORKING.md`](docs/WAY_OF_WORKING.md) | The process: roles, principles, permissions and how to adopt it. |
+| [`.claude/hooks/review-event-guard.py`](.claude/hooks/review-event-guard.py) and [its tests](tests/review-event-guard-test.sh) | A Claude Code PreToolUse hook that blocks PR reviews whose event isn't `COMMENT`, so review permission can't approve. |
+| [`tests/skills-check.sh`](tests/skills-check.sh) | Checks the provider symlinks, each `SKILL.md`'s frontmatter, and the skill list in [`skills/README.md`](skills/README.md). |
+| [CI](.github/workflows/ci.yml) | On every PR and push to `master`: the review-event guard tests and Markdown lint. |
 
-### 1. Multi-Dimensional Deep Scanning Swarm
-The framework will orchestrate a swarm of domain-specific sub-agents to analyze your codebase (planned: Abstract Syntax Tree (AST) parsing and runtime context):
-* **Code Health & Optimization:** Identifies logic bugs, security vulnerabilities, redundant logic, and performance bottlenecks.
-* **System Architecture & Data Modeling:** Evaluates database schemas, index strategies, API boundary efficiency, and architectural patterns against system design best practices.
-* **FinOps & Resource Attribution:** Scans for structural inefficiencies driving up cloud compute, data egress, database I/O, and LLM token usage.
-* **UI/UX Auditing:** Evaluates front-end code for accessibility (WCAG), user flows, visual performance, and structural layout optimizations.
+Skills live once in `skills/`; `.claude/skills`, `.agents/skills` and `.github/skills` are symlinks to it. Discovery is confirmed for Claude Code only. Codex (`.agents/skills`) and GitHub Copilot (`.github/skills`) discovery is **unverified**; see [Verifying discovery](skills/README.md#verifying-discovery).
 
-### 2. Autonomous Issue Lifecycle Management
-* **Structured Issue Generation:** Translates discovered gaps into highly structured, implementable, and isolated GitHub Issues containing clear definitions of done (DoD).
-* **Orchestrated Implementation Pipeline:** Dynamically spins up a dual-agent workflow:
-  * **Feature/Fix Agents:** Autonomously write localized code patches.
-  * **Peer-Review Agents:** Provide automated, multi-pass code reviews to enforce code style, maintainability, and safety before merging.
+## Quick start (about 5 minutes)
 
-### 3. Cognitive Memory & Evolutionary Learning
-* **Persistent Skill Synthesis:** Records successful problem-solving paths and refactoring strategies as a reusable skill library.
-* **Long-Term Preference Anchoring:** Maintains a stateful profile of user architectural preferences, coding standards, and operational guardrails to help prevent regressions or out-of-bounds code generation.
+Adopt the skills and the guard in another Git repository. You need `git`, `bash`, `python3`, `jq`, and the GitHub CLI `gh`, signed in (`gh auth status`) with access to the repository.
 
-### 4. Verification & Human-in-the-Loop (HITL)
-* **Evidence-Based Engineering:** Every proposed patch is backed by automated tests or other verifiable evidence to reduce the risk of incorrect changes.
-* **Proactive Context Gathering:** When encountering high-ambiguity trade-offs, the agent safely halts execution to consult the user—presenting prioritized options with trade-offs and a recommendation.
+1. Clone this repo next to yours and go to your repo's root:
 
+   ```bash
+   git clone https://github.com/ykaitao/KT-coding-agent.git ../KT-coding-agent
+   ```
+
+2. Copy the files. If your repo already has a `skills/` folder, this copies only the three skill folders, skips any that already exist, and leaves your `skills/README.md` alone. In that case, add the three entries from [`skills/README.md`](skills/README.md) to your own `skills/README.md` under `## Skills`:
+
+   ```bash
+   mkdir -p docs .claude/hooks tests
+   if [ -e skills ]; then for s in pr-review-loop pr-inline-review pr-address-review; do if [ -e skills/$s ]; then echo "skills/$s exists, skipped"; else cp -R ../KT-coding-agent/skills/$s skills/; fi; done; echo "skills/ already existed: add the three skills to skills/README.md under ## Skills"; else cp -R ../KT-coding-agent/skills .; fi
+   cp ../KT-coding-agent/docs/WAY_OF_WORKING.md docs/
+   cp ../KT-coding-agent/.claude/hooks/review-event-guard.py .claude/hooks/
+   cp ../KT-coding-agent/tests/review-event-guard-test.sh ../KT-coding-agent/tests/skills-check.sh tests/
+   ```
+
+3. Create the symlinks (this refuses to replace an existing `skills` directory):
+
+   ```bash
+   for d in .claude .agents .github; do mkdir -p $d; [ -e $d/skills ] && [ ! -L $d/skills ] && { echo "move $d/skills into skills/ first"; continue; }; ln -sfn ../skills $d/skills; done
+   ```
+
+4. Add the hook to `.claude/settings.local.json`. If the file already exists, merge the `hooks` block in by hand instead:
+
+   ```bash
+   [ -e .claude/settings.local.json ] && echo "merge the hooks block by hand" || cat > .claude/settings.local.json <<'EOF'
+   {
+     "hooks": {
+       "PreToolUse": [
+         {
+           "matcher": "Bash",
+           "hooks": [
+             { "type": "command", "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/review-event-guard.py\"" }
+           ]
+         }
+       ]
+     }
+   }
+   EOF
+   ```
+
+5. Add the `allow` rules for each role from [Permissions](docs/WAY_OF_WORKING.md#permissions) to the same file. Without them, every review post and reply asks for approval, so the loop can't run unattended. `.claude/settings.local.json` isn't committed: it belongs to you and to this checkout, so repeat steps 4 and 5 on each machine and in each new worktree.
+
+6. Run both checks. Every line should start with `ok`, and each script exits 0:
+
+   ```bash
+   bash tests/review-event-guard-test.sh
+   ```
+
+   ```bash
+   bash tests/skills-check.sh
+   ```
+
+7. Open a PR, start a Claude Code session as the manager, and ask it to "run the review/implement loop on PR N".
+
+The review-event guard is a Claude Code hook, so it runs only in Claude Code. Codex and Copilot sessions get the skills (discovery unverified) but no guard, and GitHub has no permission that allows review comments but not approvals. Either give them read-only access and have the manager post their reviews, or treat comment-only as a working agreement: a human checks their reviews, and only the owner decides to merge.
+
+The full adoption notes, including turning on **Automatically delete head branches** on GitHub, are in [Adopting this in another repository](docs/WAY_OF_WORKING.md#adopting-this-in-another-repository).
+
+## Roadmap (planned, not yet implemented)
+
+Tracked in [#5](https://github.com/ykaitao/KT-coding-agent/issues/5) and [#10](https://github.com/ykaitao/KT-coding-agent/issues/10).
+
+- **Deep scanning:** specialised agents that review code health, architecture and data models, cloud and token cost, and UI accessibility.
+- **Issue lifecycle:** turn findings into well-scoped GitHub issues, then run them through implement and review agents.
+- **Memory and learning:** keep successful approaches as reusable skills and remember the owner's standards and preferences.
+- **Verification and human in the loop:** back every patch with tests or other evidence, and stop to ask the owner when a trade-off is unclear.
