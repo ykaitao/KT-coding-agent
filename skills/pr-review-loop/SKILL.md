@@ -36,7 +36,11 @@ Keep the loop bounded: only must-fix comments keep it going, and the final nit r
 
 After each round, judge each agent's work. If something went wrong, improve the skill or the brief before the next round. If the work went well and the task will recur, propose a new skill. If the reviewer dropped a concern you raised, or the implementer skipped tests, fix the skill, not just the next brief.
 
+For a guardrail (a hook, a validator, a lint) where each round finds rarer bypasses, stop once the reviewer says the remaining ones are edge cases. Have implement list the remaining classes under "Known limits" in the code or docs, and tell the owner that human approval of each PR, not the guardrail, is the real control.
+
 ## Finish
+- Check that the PR's description matches its code at the final head: what it says it adds, the numbers and examples it quotes, and its limits. If they differ, have implement update the description before you ask to merge.
+- PRs that add a line to the same list (for example `skills/README.md`) conflict with each other. Right before merging each one, update its branch (`gh pr update-branch <n> --repo <owner/repo>`, or merge the base by hand if that conflicts), and wait for CI on the new head.
 - A PR opened before a CI workflow existed has no checks yet. After that workflow merges, run `gh pr update-branch <n> --repo <owner/repo>`, preferably before the last review round. It adds a merge commit, so the head moves: review the new head (at least the merged-in diff), confirm checks at that head, and tell implement to pull before its next push.
 - A PR isn't ready to merge until its checks pass. Confirm it with `gh pr checks <n> --repo <owner/repo>` at the final head before asking the owner to merge. If a check fails, send the failure to implement as another round. If checks are pending, wait (`gh pr checks <n> --repo <owner/repo> --watch`) before asking.
 - Report to the owner: rounds run, final review URL, check results, the nits you sent or skipped and why, and anything left unverified. Merge only on their word.
