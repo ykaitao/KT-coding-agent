@@ -12,6 +12,7 @@ The skills live here. `.agents/skills`, `.claude/skills` and `.github/skills` ar
 - [`scan-code-health`](scan-code-health/SKILL.md): read-only scan of a named path for code-health problems, written as an evidence-backed report.
 - [`github-markdown-editing`](github-markdown-editing/SKILL.md): write and edit GitHub comments, descriptions and reviews so their Markdown renders correctly.
 - [`branch-worktree-cleanup`](branch-worktree-cleanup/SKILL.md): audit branches and worktrees, keep useful unmerged work, and safely remove stale local state.
+- [`propose-skill`](propose-skill/SKILL.md): turn private experience into a new public skill without leaking anything, then propose it as a pull request.
 
 The overall process is described in [`docs/WAY_OF_WORKING.md`](../docs/WAY_OF_WORKING.md).
 
