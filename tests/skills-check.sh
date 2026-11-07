@@ -128,16 +128,26 @@ for base, _, names in os.walk(skills_dir):
             continue
         files.append((os.path.relpath(path, os.path.dirname(skills_dir)), text))
 
-def scan(label, pattern, keep=lambda m: True, flags=0, join=False):
+# Dangerous-instruction scans: a line may opt out only with an explicit marker,
+# so prose cannot exempt itself by accident. The marker is an HTML comment and
+# does not render, so every hit it allows is printed for reviewers to see.
+ALLOW = "<!-- skills-check: allow -->"
+
+def scan(label, pattern, keep=lambda m: True, flags=0, join=False, allow=False):
     hits = []
+    allowed = []
     for rel, text in files:
         if join:
             # Join shell line continuations (later line numbers then shift up).
             text = re.sub(r"\\\n[ \t]*", " ", text)
         for n, line in enumerate(text.splitlines(), 1):
             for m in re.finditer(pattern, line, flags):
-                if keep(m):
+                if allow and ALLOW in line:
+                    allowed.append("%s:%d: %s" % (rel, n, m.group(0)))
+                elif keep(m):
                     hits.append("%s:%d: %s" % (rel, n, m.group(0)))
+    for a in allowed:
+        print("ok   allowed (%s): %s" % (label, a))
     if hits:
         print("FAIL %s: %s" % (label, "; ".join(hits[:5])))
     else:
@@ -161,36 +171,36 @@ scan("github.com URLs to other repos", r"github\.com/([\w.-]+/[\w.-]+)",
                    and m.group(1).lower().removesuffix(".git") not in placeholders | {this_repo},
      flags=re.I)
 
-# Dangerous instructions: things an agent should never be told to do. A line may
-# opt out only with an explicit marker, so prose cannot exempt itself by accident.
-ALLOW = "<!-- skills-check: allow -->"
-danger = lambda m: ALLOW not in m.string
+# Dangerous instructions: things an agent should never be told to do.
+SHELL = r"\|\s*(sudo(\s+-\S+)*\s+)?(env\s+)?(\S*/)?"
 scan("pipe-to-shell instructions",
-     r"\b(curl|wget)\b[^|\n]*\|\s*(sudo\s+)?((ba|z|da|k)?sh|python3?|perl|node|ruby)\b"
-     r"|\b(ba|z|da|k)?sh\b[^\n]*(\$\(|<\()\s*(curl|wget)\b", keep=danger, flags=re.I, join=True)
+     r"\b(curl|wget)\b[^|\n]*" + SHELL + r"((ba|z|da|k)?sh|python3?|perl|node|ruby)\b"
+     r"|\b(ba|z|da|k)?sh\b[^\n]*(\$\(|<\()\s*(curl|wget)\b", allow=True, flags=re.I, join=True)
 scan("rm -rf on a variable or /",
-     r"\brm\s+((-[A-Za-z]+|--[a-z-]+)\s+)*(-[A-Za-z]*[rR][A-Za-z]*|--recursive)\s+((-[A-Za-z]+|--[a-z-]+)\s+)*"
+     r"\brm\s+((-[A-Za-z]+|--[a-z-]*)\s+)*(-[A-Za-z]*[rR][A-Za-z]*|--recursive)\s+((-[A-Za-z]+|--[a-z-]*)\s+)*"
      r"(\"?\$\{?\w|/(?=[\s*\"]|$)|~(?=[\s/\"]|$))",
-     keep=danger, join=True)
+     allow=True, join=True)
 scan("guard bypasses",
      r"--no-verify|dangerouslyDisableSandbox|--dangerously-skip-permissions"
      r"|\b(edit|modify|overwrite|delete|remove|disable|rm)\b[^\n]{0,30}\.claude/settings"
      r"|(?<![\w>])>>?\s*\S*\.claude/settings"
      r"|\b(remove|delete|disable|bypass|turn off|skip)\s+(the\s+)?([\w-]+\s+)?hooks?\b",
-     keep=danger, flags=re.I, join=True)
+     allow=True, flags=re.I, join=True)
 scan("force pushes to a default branch",
      r"\bgit\s+push\b(?=[^\n]*(--force\b|--force-with-lease|\s-f\b|\s\+\S*\b(main|master)\b))"
-     r"(?=[^\n]*\b(main|master)\b)[^\n]*", keep=danger, join=True)
+     r"(?=[^\n]*\b(main|master)\b)[^\n]*", allow=True, join=True)
 scan("base64-decoded execution",
-     r"base64\s+(-d|-D|--decode)\b[^\n]*\|\s*(sudo\s+)?(ba|z)?sh\b|\beval\b[^\n]*base64"
-     r"|base64\s+(-d|-D|--decode)\b[^\n]*\|\s*(python3?|perl|node|ruby)\b", keep=danger, join=True)
+     r"base64\s+(-d|-D|--decode)\b[^\n]*" + SHELL + r"((ba|z|da|k)?sh|python3?|perl|node|ruby)\b"
+     r"|\beval\b[^\n]*base64", allow=True, join=True)
 scan("prompt-injection phrases",
      r"\b(ignore|disregard|forget)\s+(all\s+|any\s+)?(the\s+)?(previous|prior|above|earlier|your)\s+"
      r"(instructions|rules|prompts?|guidelines)\b"
+     r"|\b(ignore|disregard|forget)\s+(all\s+|any\s+)?(the\s+)?(instructions|rules|prompts?|guidelines)\s+"
+     r"(above|before|earlier)\b"
      r"|\byou are now (in )?(developer mode|DAN|jailbroken)\b"
      r"|\b(do not|don.t) (tell|inform|notify) the (user|owner)\b"
      r"|\bwithout (telling|asking|informing) the (user|owner)\b",
-     keep=danger, flags=re.I)
+     allow=True, flags=re.I)
 
 if os.path.isfile(terms_file):
     terms = [t.strip() for t in open(terms_file, encoding="utf-8") if t.strip() and not t.startswith("#")]
