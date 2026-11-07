@@ -6,12 +6,14 @@ How we ship changes with AI coding agents. Every change goes through a pull requ
 
 | Role | Who | Responsibilities |
 |---|---|---|
-| **Owner** | Human | Asks for work, approves anything that writes to GitHub in their name if the agent's permissions require it, decides on merges. |
+| **Owner** | Human | Talks only to the manager: asks for work and decides on merges. |
 | **Manager** | The main agent session | Splits work into PRs, starts and briefs the other sessions, checks every report against GitHub, runs the loop, merges on the owner's word, cleans up. |
 | **Implement** | A visible agent session | Addresses review comments with the [`pr-address-review`](../skills/pr-address-review/SKILL.md) skill. |
 | **Review** | A visible agent session | Reviews PRs with the [`pr-inline-review`](../skills/pr-inline-review/SKILL.md) skill. |
 
 Delegated work runs in **visible sessions** the owner can open and watch, not in hidden background agents.
+
+**The owner talks only to the manager.** The manager has full control of the other sessions: it starts them, briefs them, and passes on the owner's decisions. The owner never has to answer a question inside another session, so each session's permissions must allow its routine GitHub writes (see "Permissions" below).
 
 ## The loop
 
@@ -28,10 +30,18 @@ The full procedure is the [`pr-review-loop`](../skills/pr-review-loop/SKILL.md) 
 ## Principles
 
 - **Trust only what's verified.** An agent's report is a claim. Check the result yourself (comment lines, commit IDs, changed files, replies) before telling anyone it's done. This loop exists because an early reviewer reported deleting comments it never deleted.
-- **Approvals belong to the owner.** If a session's permissions block an action, the owner approves it in that session. Never route a blocked action through another agent.
+- **Approvals belong to the owner, given to the manager.** Decisions such as merging come from the owner's own words to the manager. If a permission check blocks an action, no agent works around it; the manager tells the owner which permission rule is missing.
 - **Isolate parallel work.** Sessions that share a checkout don't switch its branch under each other. Use `git worktree` for a second branch and remove the worktree afterwards.
 - **Small, honest diffs.** Docs describe what exists. Planned work is labelled as planned.
 - **Learn from each round.** After each round, judge whether the agents did a great job. If they did and the task will recur, capture it as a skill. If they didn't, fix the skill or the brief before the next round.
+
+## Permissions
+
+For the loop to run with the owner talking only to the manager, every session must be allowed to:
+- post comment-only PR reviews, and replies to review comments (`gh api` POST to `repos/<owner>/<repo>/pulls/...`);
+- push to feature branches.
+
+Keep these blocked unless the owner approves each one: approving PRs, merging, pushing to the default branch, and deleting anything on GitHub.
 
 ## Skills across providers
 
