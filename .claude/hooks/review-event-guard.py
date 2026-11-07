@@ -9,7 +9,8 @@
 # - interpreters that run gh themselves (python3 -c "os.system('gh pr merge 1')",
 #   node -e, awk 'BEGIN{system("gh ...")}', perl -e);
 # - indirection through environment variables or files it doesn't read (for example
-#   GH_* settings, or a git alias in a config file it isn't pointed at);
+#   GH_* settings, or a git alias in a config file it isn't pointed at, including a
+#   repo created earlier in the same command and then used with git -C);
 # - a gh alias set before the hook was installed, a gh binary whose name is built by
 #   shell expansion, a wrapper not in RUNNERS, and API calls made without gh (curl).
 import json, os, re, shlex, subprocess, sys
@@ -117,6 +118,14 @@ def check_git(seg, cwd):
         base = cwd if os.path.isdir(cwd) else None
         if cdir:
             base = os.path.join(base or ".", cdir)
+            # The -C directory may not exist yet (made earlier in the same command,
+            # for example by git worktree add). Look the alias up from its nearest
+            # existing parent: that still sees global, system and enclosing-repo
+            # aliases. A repo config written in the same command is a known limit.
+            while not os.path.isdir(base) and os.path.dirname(base) not in ("", base):
+                base = os.path.dirname(base)
+            if not os.path.isdir(base):
+                base = cwd if os.path.isdir(cwd) else None
         try:
             out = subprocess.run(["git", "config", "--get", "alias." + sub], cwd=base,
                                  capture_output=True, text=True, timeout=5).stdout

@@ -32,6 +32,15 @@ check() { # expected_exit command
   got=$?
   if [ "$got" -eq "$expected" ]; then echo "ok   $got  $cmd"; else echo "FAIL $got (want $expected)  $cmd"; fail=1; fi
 }
+check_blocked_because() { # reason_substring command: must exit 2 with that reason
+  local why=$1 cmd=$2 err got
+  err="$(printf '{"cwd":%s,"tool_input":{"command":%s}}' \
+    "$(jq -Rn --arg v "$tmp" '$v')" "$(jq -Rn --arg v "$cmd" '$v')" \
+    | python3 -I "$hook" 2>&1 >/dev/null)"
+  got=$?
+  if [ "$got" -eq 2 ] && [[ "$err" == *"$why"* ]]; then echo "ok   2  $cmd"
+  else echo "FAIL $got (want 2: $why; got: $err)  $cmd"; fail=1; fi
+}
 check_ask() { # command: a plain gh pr merge must exit 0 with an "ask" decision on stdout
   local cmd=$1 out got
   out="$(printf '{"cwd":%s,"tool_input":{"command":%s}}' \
@@ -195,6 +204,13 @@ check 2 'git km'
 check 2 'git kx'
 check 2 'env git km'
 check 2 'git -C . km'
+# A -C directory that doesn't exist yet (created earlier in the same command):
+# aliases are looked up from its nearest existing parent, so a shell alias is
+# still caught and ordinary commands are allowed.
+check_blocked_because 'git km is a shell alias' 'git -C does-not-exist km'
+check_blocked_because 'git km is a shell alias' 'mkdir -p new-dir && git -C new-dir/deeper km'
+check 0 'git worktree add new-wt HEAD && git -C new-wt status'
+check 0 'git -C does-not-exist/deeper kco main'
 check 0 'git kco main'
 check 0 'git config --get alias.km'
 check 0 'git config user.name Test'
