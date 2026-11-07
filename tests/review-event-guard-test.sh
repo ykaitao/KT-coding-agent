@@ -150,8 +150,23 @@ check 0 'gh pr review 1 --comment -b ok'
 check 0 'gh issue comment 10 --repo o/r --body-file note.md'
 check 0 'gh pr create --repo o/r --base master --head x --title t --body-file b.md'
 check 0 'git log --oneline -1 && gh pr checks 1 --repo o/r'
-# A gh word anywhere but the first word of a command is blocked, even in a message.
-check 2 'git commit -m "mention gh alias in a message"'
+# A gh word in an ordinary argument, such as a commit message, is fine.
+check 0 'git commit -m "mention gh alias in a message"'
+# Everyday commands that mention gh in an ordinary argument pass.
+check 0 'git commit -m "fix gh hook"'
+check 0 'git commit -m "Block gh aliases in the review guard"'
+check 0 'gh pr create --repo o/r --base master --head x --title "Fix gh hook" --body-file b.md'
+check 0 'gh pr comment 1 --body "run gh pr checks first"'
+check 0 'grep -rn "gh api" skills/'
+check 0 'cat ~/.config/gh/config.yml'
+# Quoted or escaped gh inside a -c string, eval, or a shell fed by a pipe or here-doc.
+check 2 "env bash -c 'g\"\"h pr merge 1'"
+check 2 "env bash -c 'g\\h pr review 1 --approve'"
+check 2 "gh pr view 1; env bash -c 'g\"\"h pr merge 1'"
+check 2 "echo 'g\"\"h pr merge 1' | bash"
+check 2 "find . -name x -exec sh -c 'g\"\"h pr merge 1' \\;"
+check 2 "watch 'g\"\"h pr merge 1'"
+check 2 $'bash <<EOF\ngh pr merge 1\nEOF'
 check 0 'git commit -m "mention the GitHub CLI in a message"'
 # Wrappers hide the inner gh call, so any wrapped or quoted gh is blocked.
 check 2 "env bash -c 'gh pr merge 1'"

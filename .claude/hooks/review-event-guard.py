@@ -67,6 +67,15 @@ def check_gh(seg, cmd):
                 block("gh pr review without --comment")
     return merge
 
+RUNNERS = {"sh", "bash", "zsh", "dash", "ksh", "eval", "source", ".", "env", "nohup", "time",
+           "command", "builtin", "xargs", "sudo", "doas", "exec", "nice", "timeout", "stdbuf",
+           "watch", "parallel", "script", "ssh"}
+SHELLS = {"sh", "bash", "zsh", "dash", "ksh", "eval", "source", "."}
+
+def has_gh(s):
+    """A gh word, after removing the quotes and backslashes a shell would remove."""
+    return re.search(r"(?<![A-Za-z0-9_.-])gh(?![A-Za-z0-9_.-])", re.sub(r"[\"'\\]", "", s))
+
 def main():
     data = json.load(sys.stdin)
     if not isinstance(data, dict) or not isinstance(data.get("tool_input"), dict):
@@ -85,14 +94,17 @@ def main():
         segments = split_segments(cmd)
     except ValueError:
         block("could not parse the command")
-    # Fail closed on hidden gh calls: every "gh" word in the command, quoted or not,
-    # must be the first word of a simple command that is checked below. A gh behind a
-    # wrapper (env, nohup, time, command, xargs, sudo, exec), inside a sh/bash/zsh -c
-    # string or eval, or anywhere in an argument is blocked rather than unwrapped.
-    gh_words = len(re.findall(r"(?<![A-Za-z0-9_-])gh(?![A-Za-z0-9_-])", cmd))
-    gh_first = sum(1 for seg in segments if seg and os.path.basename(seg[0]) == "gh")
-    if gh_words != gh_first:
-        block("gh must be the first word of each command, not wrapped or quoted")
+    # Fail closed on hidden gh calls. A gh word inside an argument is blocked only
+    # where that argument can run as a command: when the simple command contains a
+    # shell, eval or wrapper word (sh -c, env, nohup, xargs, find -exec sh, watch...),
+    # or when the command line feeds a shell (pipe or here-doc into bash). Quotes and
+    # backslashes are removed first, because an inner shell would remove them too.
+    # A gh word in an ordinary argument, such as a commit message, is allowed.
+    for seg in segments:
+        if any(os.path.basename(t) in RUNNERS for t in seg) and any(has_gh(t) for t in seg):
+            block("gh behind a shell, eval or wrapper; run gh as its own command")
+        if seg and os.path.basename(seg[0]) in SHELLS and has_gh(cmd):
+            block("a command line that feeds a shell must not contain gh")
 
     merge = False
     for seg in segments:
