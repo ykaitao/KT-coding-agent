@@ -8,6 +8,7 @@ trap 'rm -rf "$tmp"' EXIT
 echo '{"event":"COMMENT"}' > "$tmp/c.json"
 echo '{"event":"APPROVE"}' > "$tmp/a.json"
 echo 'APPROVE' > "$tmp/ev.txt"
+echo 'COMMENT' > "$tmp/evc.txt"
 
 fail=0
 check() { # expected_exit command
@@ -27,6 +28,7 @@ check 0 "gh api $R -f event=COMMENT -f body=ok"
 check 0 "gh api $R"
 check 0 "gh api --paginate $R --jq .[0].id"
 check 0 "gh pr review 1 --comment -b ok"
+check 0 "gh api $R -F event=@evc.txt"
 check 0 "git status"
 # Blocked: approvals and request-changes in every flag form.
 check 2 "gh api $R -X POST --input a.json"
@@ -42,12 +44,16 @@ check 2 "gh api $R --method=PUT -f body=x"
 check 2 "gh api $R -X POST -f body=no-event"
 check 2 "gh pr review 1 --approve"
 check 2 "gh pr review 1 --comment --approve"
+check 2 "gh pr review 1 --request-changes -b x"
 # Blocked: review writes combined with other commands (the file can change first).
 check 2 "printf x > c.json && gh api $R -X POST --input c.json"
 check 2 "cp a.json c.json & gh api $R -X POST --input c.json"
-check 2 "gh api $R -X POST --input c.json; echo hi"
+check 2 "gh api $R -X POST --input c.json ; echo hi"
 check 2 "gh api $R -X POST --input c.json | cat"
-check 2 "gh api $R -X POST --input \$(echo a.json)"
-check 2 $'gh api '"$R"$' -X POST --input c.json\ngh api '"$R"$' -f event=APPROVE'
+check 2 "gh api $R -X POST --input c.json \$(cp a.json c.json)"
+check 2 $'cp a.json c.json\ngh api '"$R"$' -X POST --input c.json'
+check 2 "gh api $R -X POST --input c.json || true"
+check 2 "gh api $R -X POST --input c.json \`true\`"
+check 2 "gh api $R -X POST --input c.json < c.json"
 
 exit $fail
