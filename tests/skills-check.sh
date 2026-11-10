@@ -66,6 +66,16 @@ task_scope_policy_matches() {
     && grep -qF 'Production reads are external actions too' "$skill_file"
 }
 
+failed_check_policy_matches() {
+  local skill_file="$1"
+  grep -qF 'Failed checks and owner/infrastructure gates' "$skill_file" \
+    && grep -qF 'current-head check diagnostics and annotations' "$skill_file" \
+    && grep -qF 'A job that never started has no steps or job log' "$skill_file" \
+    && grep -qF 'full PR head SHA' "$skill_file" \
+    && grep -qF 'owner action and where to take it' "$skill_file" \
+    && grep -qF 'PR description' "$skill_file"
+}
+
 write_without_marker() {
   python3 - "$1" "$2" "$3" <<'PY'
 import sys
@@ -94,10 +104,16 @@ else
   fail "AGENTS.md and pr-review-loop/SKILL.md must require current-task scope and authorization for production or paid calls"
 fi
 
+if failed_check_policy_matches "$loop_skill_file"; then
+  ok "failed checks require current-head diagnostics, head-scoped gates and actionable PR owner gates"
+else
+  fail "pr-review-loop/SKILL.md must distinguish missing job logs from diagnostics and record current-head gates and owner actions"
+fi
+
 # Negative fixtures prove the matcher rejects the policy when the owner gate is
 # removed from either file; the provider markers remain intact in each fixture.
 fixture_dir="$(mktemp -d)"
-trap 'rm -f "$fixture_dir/AGENTS.md" "$fixture_dir/SKILL.md" "$fixture_dir/AGENTS.no-scope.md" "$fixture_dir/SKILL.no-scope.md" "$fixture_dir/AGENTS.no-resume-check.md" "$fixture_dir/SKILL.no-resume-check.md"; rmdir "$fixture_dir"' EXIT
+trap 'rm -f "$fixture_dir/AGENTS.md" "$fixture_dir/SKILL.md" "$fixture_dir/AGENTS.no-scope.md" "$fixture_dir/SKILL.no-scope.md" "$fixture_dir/AGENTS.no-resume-check.md" "$fixture_dir/SKILL.no-resume-check.md" "$fixture_dir/SKILL.no-check-diagnostics.md"; rmdir "$fixture_dir"' EXIT
 if ! write_without_marker "$agents_file" "$fixture_dir/AGENTS.md" 'Ask the owner before falling back to hidden/background agents.'; then
   fail "could not create AGENTS.md fixture without the owner gate"
 elif ! grep -qF 'Use authorized owner-visible agent sessions by default.' "$fixture_dir/AGENTS.md"; then
@@ -144,6 +160,13 @@ elif task_scope_policy_matches "$agents_file" "$fixture_dir/SKILL.no-resume-chec
   fail "task-scope matcher accepted pr-review-loop/SKILL.md without the resumed-turn scope check"
 else
   ok "task-scope matcher rejects pr-review-loop/SKILL.md without the resumed-turn scope check"
+fi
+if ! write_without_marker "$loop_skill_file" "$fixture_dir/SKILL.no-check-diagnostics.md" 'current-head check diagnostics and annotations'; then
+  fail "could not create pr-review-loop/SKILL.md fixture without the failed-check diagnostics marker"
+elif failed_check_policy_matches "$fixture_dir/SKILL.no-check-diagnostics.md"; then
+  fail "failed-check matcher accepted pr-review-loop/SKILL.md without current-head diagnostics"
+else
+  ok "failed-check matcher rejects pr-review-loop/SKILL.md without current-head diagnostics"
 fi
 
 # 2. Frontmatter of each SKILL.md.
