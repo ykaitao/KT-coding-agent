@@ -12,7 +12,7 @@
 #      honest mistakes, not a defence: it scans line by line (joining lines that
 #      end in a backslash), so text split across lines or fences, Unicode
 #      lookalikes, or reworded instructions can pass.
-#   6. the manager instructions keep owner-visible sessions as the default
+#   6. manager instructions name the visible-session default and require owner approval before hidden/background fallback
 # Run from anywhere: bash tests/skills-check.sh
 # Private terms: one per line in $SKILLS_PRIVATE_TERMS
 # (default ~/.config/kt-coding-agent/private-terms.txt). Never commit that file.
@@ -39,15 +39,64 @@ for link in .claude/skills .agents/skills .github/skills; do
   fi
 done
 
-# 1b. The manager loop must keep visible sessions as the default across hosts.
-if grep -qF 'Use owner-visible agent sessions by default.' "$root/AGENTS.md" \
-  && grep -qF 'Visible sessions across agent hosts' "$skills_dir/pr-review-loop/SKILL.md" \
-  && grep -qF 'Codex desktop' "$skills_dir/pr-review-loop/SKILL.md" \
-  && grep -qF 'Claude desktop' "$skills_dir/pr-review-loop/SKILL.md" \
-  && grep -qF 'Other hosts' "$skills_dir/pr-review-loop/SKILL.md"; then
-  ok "manager workflow defaults to visible sessions across agent hosts"
+# 1b. Check required policy wording in both files. This is a literal marker
+# check, not a semantic verification of the complete provider/tool contract.
+visible_session_policy_matches() {
+  local agents_file="$1"
+  local skill_file="$2"
+  grep -qF 'Use authorized owner-visible agent sessions by default.' "$agents_file" \
+    && grep -qF 'Ask the owner before falling back to hidden/background agents.' "$agents_file" \
+    && grep -qF 'Visible sessions across agent hosts' "$skill_file" \
+    && grep -qF 'Codex desktop' "$skill_file" \
+    && grep -qF 'Claude desktop' "$skill_file" \
+    && grep -qF 'Other hosts' "$skill_file" \
+    && grep -qF 'Ask the owner before falling back to hidden/background agents.' "$skill_file"
+}
+
+write_without_owner_gate() {
+  python3 - "$1" "$2" <<'PY'
+import sys
+from pathlib import Path
+
+source, destination = map(Path, sys.argv[1:])
+text = source.read_text(encoding="utf-8")
+gate = "Ask the owner before falling back to hidden/background agents."
+if text.count(gate) != 1:
+    sys.exit("expected exactly one owner-approval marker in %s" % source)
+destination.write_text(text.replace(gate, "", 1), encoding="utf-8")
+PY
+}
+
+agents_file="$root/AGENTS.md"
+loop_skill_file="$skills_dir/pr-review-loop/SKILL.md"
+if visible_session_policy_matches "$agents_file" "$loop_skill_file"; then
+  ok "manager policy names visible sessions and owner approval before hidden/background fallback"
 else
-  fail "manager workflow must default to visible sessions across agent hosts"
+  fail "manager policy must name visible sessions and owner approval before hidden/background fallback in AGENTS.md and pr-review-loop/SKILL.md"
+fi
+
+# Negative fixtures prove the matcher rejects the policy when the owner gate is
+# removed from either file; the provider markers remain intact in each fixture.
+fixture_dir="$(mktemp -d)"
+trap 'rm -f "$fixture_dir/AGENTS.md" "$fixture_dir/SKILL.md"; rmdir "$fixture_dir"' EXIT
+if ! write_without_owner_gate "$agents_file" "$fixture_dir/AGENTS.md"; then
+  fail "could not create AGENTS.md fixture without the owner gate"
+elif ! grep -qF 'Use authorized owner-visible agent sessions by default.' "$fixture_dir/AGENTS.md"; then
+  fail "AGENTS.md negative fixture lost its visible-session marker"
+elif visible_session_policy_matches "$fixture_dir/AGENTS.md" "$loop_skill_file"; then
+  fail "visible-session matcher accepted AGENTS.md without the hidden/background owner gate"
+else
+  ok "visible-session matcher rejects AGENTS.md without the hidden/background owner gate"
+fi
+cp "$agents_file" "$fixture_dir/AGENTS.md"
+if ! write_without_owner_gate "$loop_skill_file" "$fixture_dir/SKILL.md"; then
+  fail "could not create pr-review-loop/SKILL.md fixture without the owner gate"
+elif ! grep -qF 'Visible sessions across agent hosts' "$fixture_dir/SKILL.md"; then
+  fail "pr-review-loop/SKILL.md negative fixture lost its visible-session marker"
+elif visible_session_policy_matches "$agents_file" "$fixture_dir/SKILL.md"; then
+  fail "visible-session matcher accepted pr-review-loop/SKILL.md without the hidden/background owner gate"
+else
+  ok "visible-session matcher rejects pr-review-loop/SKILL.md without the hidden/background owner gate"
 fi
 
 # 2. Frontmatter of each SKILL.md.
