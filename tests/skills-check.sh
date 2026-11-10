@@ -76,6 +76,15 @@ failed_check_policy_matches() {
     && grep -qF 'PR description' "$skill_file"
 }
 
+serialized_limit_and_progress_policy_matches() {
+  local skill_file="$1"
+  grep -qF 'exact serialized or encoded representation sent over the wire' "$skill_file" \
+    && grep -qF 'pre-serialization estimate' "$skill_file" \
+    && grep -qF '100% means all work is complete' "$skill_file" \
+    && grep -qF 'per-item retries and fallbacks' "$skill_file" \
+    && grep -qF 'single isolated item' "$skill_file"
+}
+
 write_without_marker() {
   python3 - "$1" "$2" "$3" <<'PY'
 import sys
@@ -110,10 +119,17 @@ else
   fail "pr-review-loop/SKILL.md must distinguish missing job logs from diagnostics and record current-head gates and owner actions"
 fi
 
+review_skill_file="$skills_dir/pr-inline-review/SKILL.md"
+if serialized_limit_and_progress_policy_matches "$review_skill_file"; then
+  ok "review guidance checks wire-representation limits and progress through retries/fallbacks"
+else
+  fail "pr-inline-review/SKILL.md must check serialized request limits and terminal progress across retries and fallbacks"
+fi
+
 # Negative fixtures prove the matcher rejects the policy when the owner gate is
 # removed from either file; the provider markers remain intact in each fixture.
 fixture_dir="$(mktemp -d)"
-trap 'rm -f "$fixture_dir/AGENTS.md" "$fixture_dir/SKILL.md" "$fixture_dir/AGENTS.no-scope.md" "$fixture_dir/SKILL.no-scope.md" "$fixture_dir/AGENTS.no-resume-check.md" "$fixture_dir/SKILL.no-resume-check.md" "$fixture_dir/SKILL.no-check-diagnostics.md"; rmdir "$fixture_dir"' EXIT
+trap 'rm -f "$fixture_dir/AGENTS.md" "$fixture_dir/SKILL.md" "$fixture_dir/AGENTS.no-scope.md" "$fixture_dir/SKILL.no-scope.md" "$fixture_dir/AGENTS.no-resume-check.md" "$fixture_dir/SKILL.no-resume-check.md" "$fixture_dir/SKILL.no-check-diagnostics.md" "$fixture_dir/SKILL.no-wire-limit.md" "$fixture_dir/SKILL.no-progress-terminal.md"; rmdir "$fixture_dir"' EXIT
 if ! write_without_marker "$agents_file" "$fixture_dir/AGENTS.md" 'Ask the owner before falling back to hidden/background agents.'; then
   fail "could not create AGENTS.md fixture without the owner gate"
 elif ! grep -qF 'Use authorized owner-visible agent sessions by default.' "$fixture_dir/AGENTS.md"; then
@@ -167,6 +183,20 @@ elif failed_check_policy_matches "$fixture_dir/SKILL.no-check-diagnostics.md"; t
   fail "failed-check matcher accepted pr-review-loop/SKILL.md without current-head diagnostics"
 else
   ok "failed-check matcher rejects pr-review-loop/SKILL.md without current-head diagnostics"
+fi
+if ! write_without_marker "$review_skill_file" "$fixture_dir/SKILL.no-wire-limit.md" 'exact serialized or encoded representation sent over the wire'; then
+  fail "could not create pr-inline-review/SKILL.md fixture without the wire-limit marker"
+elif serialized_limit_and_progress_policy_matches "$fixture_dir/SKILL.no-wire-limit.md"; then
+  fail "review matcher accepted pr-inline-review/SKILL.md without wire-representation limits"
+else
+  ok "review matcher rejects pr-inline-review/SKILL.md without wire-representation limits"
+fi
+if ! write_without_marker "$review_skill_file" "$fixture_dir/SKILL.no-progress-terminal.md" '100% means all work is complete'; then
+  fail "could not create pr-inline-review/SKILL.md fixture without the terminal-progress marker"
+elif serialized_limit_and_progress_policy_matches "$fixture_dir/SKILL.no-progress-terminal.md"; then
+  fail "review matcher accepted pr-inline-review/SKILL.md without terminal-progress checks"
+else
+  ok "review matcher rejects pr-inline-review/SKILL.md without terminal-progress checks"
 fi
 
 # 2. Frontmatter of each SKILL.md.
