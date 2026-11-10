@@ -12,6 +12,7 @@
 #      honest mistakes, not a defence: it scans line by line (joining lines that
 #      end in a backslash), so text split across lines or fences, Unicode
 #      lookalikes, or reworded instructions can pass.
+#   6. the manager instructions keep owner-visible sessions as the default
 # Run from anywhere: bash tests/skills-check.sh
 # Private terms: one per line in $SKILLS_PRIVATE_TERMS
 # (default ~/.config/kt-coding-agent/private-terms.txt). Never commit that file.
@@ -37,6 +38,17 @@ for link in .claude/skills .agents/skills .github/skills; do
     ok "$link -> skills/"
   fi
 done
+
+# 1b. The manager loop must keep visible sessions as the default across hosts.
+if grep -qF 'Use owner-visible agent sessions by default.' "$root/AGENTS.md" \
+  && grep -qF 'Visible sessions across agent hosts' "$skills_dir/pr-review-loop/SKILL.md" \
+  && grep -qF 'Codex desktop' "$skills_dir/pr-review-loop/SKILL.md" \
+  && grep -qF 'Claude desktop' "$skills_dir/pr-review-loop/SKILL.md" \
+  && grep -qF 'Other hosts' "$skills_dir/pr-review-loop/SKILL.md"; then
+  ok "manager workflow defaults to visible sessions across agent hosts"
+else
+  fail "manager workflow must default to visible sessions across agent hosts"
+fi
 
 # 2. Frontmatter of each SKILL.md.
 existing=""
