@@ -29,7 +29,7 @@ Use that host's supported tools and preserve the handle-to-role mapping. Hidden/
 
 ## Task briefs and prior context
 
-The manager's latest brief defines each session's task. It names the repository, issue or PR, expected result, permitted external services or calls and any request cap, plus exclusions. Prior chat turns, issue discussions and earlier approvals provide context only; they do not authorize work on another task. A resumed session that follows stale instructions must stop and report to the manager before it reads unrelated issues, calls an external service or edits files. Production reads need current-task owner authorization just like writes, and paid API calls need explicit authorization with a cap; every retry counts toward it.
+The manager's latest brief defines each session's task. It names the repository, issue or PR, expected result, permitted external services or calls and any request cap, plus exclusions. Before the first repository or GitHub action in every resumed turn, the agent states the repository and issue/PR from that brief, then verifies the checkout or PR head against it. If the thread title, branch, or fetched metadata points elsewhere, stop and confirm scope with the manager instead of following the older context. Prior chat turns, issue discussions and earlier approvals provide context only; they do not authorize work on another task. A resumed session that follows stale instructions must stop and report to the manager before it reads unrelated issues, calls an external service or edits files. Production reads need current-task owner authorization just like writes, and paid API calls need explicit authorization with a cap; every retry counts toward it.
 
 ## The loop
 

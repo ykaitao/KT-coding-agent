@@ -58,9 +58,11 @@ task_scope_policy_matches() {
   local skill_file="$2"
   grep -qF 'Use the current task boundary.' "$agents_file" \
     && grep -qF 'Prior turns, memory, issue discussions and approvals are context, not authorization to work elsewhere.' "$agents_file" \
+    && grep -qF 'Before the first repository or GitHub action in every resumed turn' "$agents_file" \
     && grep -qF 'Read-only production access and paid API calls require owner authorization for the current task' "$agents_file" \
     && grep -qF 'Brief each session for one task' "$skill_file" \
     && grep -qF 'Prior session history, issue discussions, saved memory, and approvals do not authorize a different task' "$skill_file" \
+    && grep -qF 'Before the first repository or GitHub action in every resumed turn' "$skill_file" \
     && grep -qF 'Production reads are external actions too' "$skill_file"
 }
 
@@ -95,7 +97,7 @@ fi
 # Negative fixtures prove the matcher rejects the policy when the owner gate is
 # removed from either file; the provider markers remain intact in each fixture.
 fixture_dir="$(mktemp -d)"
-trap 'rm -f "$fixture_dir/AGENTS.md" "$fixture_dir/SKILL.md" "$fixture_dir/AGENTS.no-scope.md" "$fixture_dir/SKILL.no-scope.md"; rmdir "$fixture_dir"' EXIT
+trap 'rm -f "$fixture_dir/AGENTS.md" "$fixture_dir/SKILL.md" "$fixture_dir/AGENTS.no-scope.md" "$fixture_dir/SKILL.no-scope.md" "$fixture_dir/AGENTS.no-resume-check.md" "$fixture_dir/SKILL.no-resume-check.md"; rmdir "$fixture_dir"' EXIT
 if ! write_without_marker "$agents_file" "$fixture_dir/AGENTS.md" 'Ask the owner before falling back to hidden/background agents.'; then
   fail "could not create AGENTS.md fixture without the owner gate"
 elif ! grep -qF 'Use authorized owner-visible agent sessions by default.' "$fixture_dir/AGENTS.md"; then
@@ -128,6 +130,20 @@ elif task_scope_policy_matches "$agents_file" "$fixture_dir/SKILL.no-scope.md"; 
   fail "task-scope matcher accepted pr-review-loop/SKILL.md without the current-task boundary"
 else
   ok "task-scope matcher rejects pr-review-loop/SKILL.md without the current-task boundary"
+fi
+if ! write_without_marker "$agents_file" "$fixture_dir/AGENTS.no-resume-check.md" 'Before the first repository or GitHub action in every resumed turn'; then
+  fail "could not create AGENTS.md fixture without the resumed-turn scope check"
+elif task_scope_policy_matches "$fixture_dir/AGENTS.no-resume-check.md" "$loop_skill_file"; then
+  fail "task-scope matcher accepted AGENTS.md without the resumed-turn scope check"
+else
+  ok "task-scope matcher rejects AGENTS.md without the resumed-turn scope check"
+fi
+if ! write_without_marker "$loop_skill_file" "$fixture_dir/SKILL.no-resume-check.md" 'Before the first repository or GitHub action in every resumed turn'; then
+  fail "could not create pr-review-loop/SKILL.md fixture without the resumed-turn scope check"
+elif task_scope_policy_matches "$agents_file" "$fixture_dir/SKILL.no-resume-check.md"; then
+  fail "task-scope matcher accepted pr-review-loop/SKILL.md without the resumed-turn scope check"
+else
+  ok "task-scope matcher rejects pr-review-loop/SKILL.md without the resumed-turn scope check"
 fi
 
 # 2. Frontmatter of each SKILL.md.
