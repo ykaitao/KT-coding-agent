@@ -50,7 +50,7 @@ For a review, name each principle a change breaks, with the scenario that breaks
 
 ## Security Rules budgets
 
-- When measuring Firestore Rules expression limits, keep the test operation otherwise valid and isolate it from setup writes. The Emulator `ruleCoverage` report accumulates evaluation counts per expression/subexpression across the test run; those totals are not a per-request expression count. To assess the documented 1,000-expression per-request limit, use request-level evidence where available and state clearly when the emulator report cannot establish that count. Do not compare suite-wide coverage totals with the per-request limit. See [Firebase's Rules limits](https://firebase.google.com/docs/rules/rules-behavior) and [Emulator coverage reports](https://firebase.google.com/docs/rules/emulator-reports).
+- When measuring Firestore Rules expression limits, keep the test operation otherwise valid and isolate it from setup writes. Replay the same operation against the baseline and candidate rules before attributing a limit failure to the change. The Emulator `ruleCoverage` report accumulates evaluation counts per expression/subexpression across the test run; those totals are not a per-request expression count. To assess the documented 1,000-expression per-request limit, use request-level evidence where available and state clearly when the emulator report cannot establish that count. Do not compare suite-wide coverage totals with the per-request limit. See [Firebase's Rules limits](https://firebase.google.com/docs/rules/rules-behavior) and [Emulator coverage reports](https://firebase.google.com/docs/rules/emulator-reports).
 
 ## Migrations
 
