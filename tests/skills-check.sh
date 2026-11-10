@@ -69,11 +69,21 @@ task_scope_policy_matches() {
 failed_check_policy_matches() {
   local skill_file="$1"
   grep -qF 'Failed checks and owner/infrastructure gates' "$skill_file" \
-    && grep -qF 'current-head check diagnostics and annotations' "$skill_file" \
+    && grep -qF 'inspect diagnostics for the exact PR head: read check-run annotations' "$skill_file" \
     && grep -qF 'A job that never started has no steps or job log' "$skill_file" \
     && grep -qF 'full PR head SHA' "$skill_file" \
     && grep -qF 'owner action and where to take it' "$skill_file" \
     && grep -qF 'PR description' "$skill_file"
+}
+
+failed_check_narrative_policy_matches() {
+  local skill_file="$1"
+  grep -qF 'For every failed required check, inspect diagnostics for the exact PR head' "$skill_file" \
+    && grep -qF 'read check-run annotations, determine whether the job started, and record its available steps or logs' "$skill_file" \
+    && grep -qF "Compare the PR description's CI narrative with those exact-head diagnostics" "$skill_file" \
+    && grep -qF 'correct stale head/status claims and remove claims about causes that the evidence does not support before handoff' "$skill_file" \
+    && grep -qF 'Classify a failure as an owner/infrastructure gate only when exact-head diagnostics support that conclusion' "$skill_file" \
+    && grep -qF 'If they do not establish the cause, say that it is unknown and do not guess whether the failure is an infrastructure or code failure' "$skill_file"
 }
 
 pr_body_evidence_policy_matches() {
@@ -127,6 +137,12 @@ else
   fail "pr-review-loop/SKILL.md must distinguish missing job logs from diagnostics and record current-head gates and owner actions"
 fi
 
+if failed_check_narrative_policy_matches "$loop_skill_file"; then
+  ok "failed-check CI narratives must match exact-head annotations, job state and available logs without guessing"
+else
+  fail "pr-review-loop/SKILL.md must compare failed-check CI narratives with exact-head annotations, job state and available logs"
+fi
+
 if pr_body_evidence_policy_matches "$loop_skill_file"; then
   ok "owner handoff requires PR-body behavior, test and check evidence verified at the exact head"
 else
@@ -143,7 +159,7 @@ fi
 # Negative fixtures prove the matchers reject policies with required markers
 # removed; unrelated policy markers remain intact in each fixture.
 fixture_dir="$(mktemp -d)"
-trap 'rm -f "$fixture_dir/AGENTS.md" "$fixture_dir/SKILL.md" "$fixture_dir/AGENTS.no-scope.md" "$fixture_dir/SKILL.no-scope.md" "$fixture_dir/AGENTS.no-resume-check.md" "$fixture_dir/SKILL.no-resume-check.md" "$fixture_dir/SKILL.no-check-diagnostics.md" "$fixture_dir/SKILL.no-pr-body-evidence.md" "$fixture_dir/SKILL.no-wire-limit.md" "$fixture_dir/SKILL.no-progress-terminal.md"; rmdir "$fixture_dir"' EXIT
+trap 'rm -f "$fixture_dir/AGENTS.md" "$fixture_dir/SKILL.md" "$fixture_dir/AGENTS.no-scope.md" "$fixture_dir/SKILL.no-scope.md" "$fixture_dir/AGENTS.no-resume-check.md" "$fixture_dir/SKILL.no-resume-check.md" "$fixture_dir/SKILL.no-check-diagnostics.md" "$fixture_dir/SKILL.no-failure-narrative.md" "$fixture_dir/SKILL.no-pr-body-evidence.md" "$fixture_dir/SKILL.no-wire-limit.md" "$fixture_dir/SKILL.no-progress-terminal.md"; rmdir "$fixture_dir"' EXIT
 if ! write_without_marker "$agents_file" "$fixture_dir/AGENTS.md" 'Ask the owner before falling back to hidden/background agents.'; then
   fail "could not create AGENTS.md fixture without the owner gate"
 elif ! grep -qF 'Use authorized owner-visible agent sessions by default.' "$fixture_dir/AGENTS.md"; then
@@ -191,12 +207,19 @@ elif task_scope_policy_matches "$agents_file" "$fixture_dir/SKILL.no-resume-chec
 else
   ok "task-scope matcher rejects pr-review-loop/SKILL.md without the resumed-turn scope check"
 fi
-if ! write_without_marker "$loop_skill_file" "$fixture_dir/SKILL.no-check-diagnostics.md" 'current-head check diagnostics and annotations'; then
+if ! write_without_marker "$loop_skill_file" "$fixture_dir/SKILL.no-check-diagnostics.md" 'inspect diagnostics for the exact PR head: read check-run annotations'; then
   fail "could not create pr-review-loop/SKILL.md fixture without the failed-check diagnostics marker"
 elif failed_check_policy_matches "$fixture_dir/SKILL.no-check-diagnostics.md"; then
   fail "failed-check matcher accepted pr-review-loop/SKILL.md without current-head diagnostics"
 else
   ok "failed-check matcher rejects pr-review-loop/SKILL.md without current-head diagnostics"
+fi
+if ! write_without_marker "$loop_skill_file" "$fixture_dir/SKILL.no-failure-narrative.md" "Compare the PR description's CI narrative with those exact-head diagnostics"; then
+  fail "could not create pr-review-loop/SKILL.md fixture without the CI-narrative comparison marker"
+elif failed_check_narrative_policy_matches "$fixture_dir/SKILL.no-failure-narrative.md"; then
+  fail "failed-check narrative matcher accepted pr-review-loop/SKILL.md without CI-narrative comparison"
+else
+  ok "failed-check narrative matcher rejects pr-review-loop/SKILL.md without CI-narrative comparison"
 fi
 if ! write_without_marker "$loop_skill_file" "$fixture_dir/SKILL.no-pr-body-evidence.md" 'Before owner handoff, compare the PR description with the exact current head'; then
   fail "could not create pr-review-loop/SKILL.md fixture without the PR-body evidence marker"

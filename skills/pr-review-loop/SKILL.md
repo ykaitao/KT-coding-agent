@@ -52,7 +52,9 @@ After each round, judge each agent's work. If something went wrong, improve the 
 
 ### Failed checks and owner/infrastructure gates
 
-- For every failed required check, inspect the current-head check diagnostics and annotations, not only the job log. Record whether the job started and whether it produced steps or logs. A job that never started has no steps or job log, but may still have a check-run annotation that explains why; report those facts separately. If no annotation or other diagnostic is available, say that explicitly rather than inferring it from missing logs.
+- For every failed required check, inspect diagnostics for the exact PR head: read check-run annotations, determine whether the job started, and record its available steps or logs. A job that never started has no steps or job log, but may still have an annotation; say explicitly when diagnostic evidence is unavailable.
+- Compare the PR description's CI narrative with those exact-head diagnostics; correct stale head/status claims and remove claims about causes that the evidence does not support before handoff.
+- Classify a failure as an owner/infrastructure gate only when exact-head diagnostics support that conclusion. If they do not establish the cause, say that it is unknown and do not guess whether the failure is an infrastructure or code failure.
 - Record the full PR head SHA and identify which required gates passed, failed, were skipped, or did not run on that SHA. Label results from earlier heads with their own SHA; they do not validate the current head.
 - When a check is blocked by an owner or infrastructure gate (for example account payments or spending limits, permissions, missing secrets, or unavailable runners), put the diagnostic, the exact owner action and where to take it, and the gates that actually ran on the current head in the PR description. Keep this separate from implementation findings and update the description before handoff.
 
