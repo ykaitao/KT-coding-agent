@@ -48,6 +48,10 @@ For a review, name each principle a change breaks, with the scenario that breaks
 - Test each constraint by breaking only that rule. A test row that also has a missing parent fails on the foreign key and proves nothing about the CHECK.
 - A new allowed value can't reach production before the constraint that permits it.
 
+## Security Rules budgets
+
+- When measuring Firestore Rules expression limits, keep the test operation otherwise valid and isolate it from setup writes. The Emulator `ruleCoverage` report accumulates evaluation counts per expression/subexpression across the test run; those totals are not a per-request expression count. To assess the documented 1,000-expression per-request limit, use request-level evidence where available and state clearly when the emulator report cannot establish that count. Do not compare suite-wide coverage totals with the per-request limit. See [Firebase's Rules limits](https://firebase.google.com/docs/rules/rules-behavior) and [Emulator coverage reports](https://firebase.google.com/docs/rules/emulator-reports).
+
 ## Migrations
 
 - Use ordered migrations with a single runner. Each starts with a read-only preflight that names the offending table and rows, and it stops instead of guessing when data is ambiguous.
