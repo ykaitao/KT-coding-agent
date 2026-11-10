@@ -17,6 +17,10 @@ Use the host's visible conversation or task-session mechanism. First inspect the
 
 If the manager cannot access the host's visible-session controls, pause and explain the limitation instead of silently falling back to hidden agents. Messaging or creating a session must be within the owner's task authorization.
 
+## Brief each session for one task
+
+For every new or resumed session, make the latest manager prompt the explicit task boundary: name the repository, issue or PR, deliverable, allowed external services or calls (with a request cap when relevant), and exclusions. Prior session history, issue discussions, saved memory, and approvals do not authorize a different task or carry over to a new assignment. If a resumed session starts following stale instructions, stop it and re-brief it before it reads other issues, calls external services, or edits files. Production reads are external actions too; production access and paid API calls need owner authorization for the current task, and retries count against any approved cap. The manager remains the owner's only contact and relays any question or needed authorization.
+
 ## Parallel pairs
 
 To run several PRs at once, give each one its own pair (for example `implement1`/`review1`), and only run as many pairs as you can verify properly; two worked well. Free disk space limits it too, since each authorized implement session needs its own worktree: before starting another pair, check free space with `df -h .` and start it only if that exceeds the size of one existing worktree (`du -sh <worktree>`) plus its build output, and remove each worktree and its branches right after its PR merges (see "Finish").

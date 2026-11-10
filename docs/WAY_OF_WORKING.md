@@ -27,6 +27,10 @@ The default is an owner-visible conversation or task session in the current agen
 
 Use that host's supported tools and preserve the handle-to-role mapping. Hidden/background subagents are not the default. If no suitable authorized visible session exists, or the host cannot provide one, explain the specific missing authorization or capability and ask the owner before using hidden delegation.
 
+## Task briefs and prior context
+
+The manager's latest brief defines each session's task. It names the repository, issue or PR, expected result, permitted external services or calls and any request cap, plus exclusions. Prior chat turns, issue discussions and earlier approvals provide context only; they do not authorize work on another task. A resumed session that follows stale instructions must stop and report to the manager before it reads unrelated issues, calls an external service or edits files. Production reads need current-task owner authorization just like writes, and paid API calls need explicit authorization with a cap; every retry counts toward it.
+
 ## The loop
 
 The full procedure is the [`pr-review-loop`](../skills/pr-review-loop/SKILL.md) skill. In short:

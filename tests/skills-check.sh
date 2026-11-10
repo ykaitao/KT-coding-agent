@@ -12,7 +12,7 @@
 #      honest mistakes, not a defence: it scans line by line (joining lines that
 #      end in a backslash), so text split across lines or fences, Unicode
 #      lookalikes, or reworded instructions can pass.
-#   6. manager instructions name the visible-session default and require owner approval before hidden/background fallback
+#   6. manager instructions name the visible-session default, keep scope and approvals task-specific, and require owner approval before hidden/background fallback
 # Run from anywhere: bash tests/skills-check.sh
 # Private terms: one per line in $SKILLS_PRIVATE_TERMS
 # (default ~/.config/kt-coding-agent/private-terms.txt). Never commit that file.
@@ -53,17 +53,28 @@ visible_session_policy_matches() {
     && grep -qF 'Ask the owner before falling back to hidden/background agents.' "$skill_file"
 }
 
-write_without_owner_gate() {
-  python3 - "$1" "$2" <<'PY'
+task_scope_policy_matches() {
+  local agents_file="$1"
+  local skill_file="$2"
+  grep -qF 'Use the current task boundary.' "$agents_file" \
+    && grep -qF 'Prior turns, memory, issue discussions and approvals are context, not authorization to work elsewhere.' "$agents_file" \
+    && grep -qF 'Read-only production access and paid API calls require owner authorization for the current task' "$agents_file" \
+    && grep -qF 'Brief each session for one task' "$skill_file" \
+    && grep -qF 'Prior session history, issue discussions, saved memory, and approvals do not authorize a different task' "$skill_file" \
+    && grep -qF 'Production reads are external actions too' "$skill_file"
+}
+
+write_without_marker() {
+  python3 - "$1" "$2" "$3" <<'PY'
 import sys
 from pathlib import Path
 
-source, destination = map(Path, sys.argv[1:])
+source, destination = map(Path, sys.argv[1:3])
+marker = sys.argv[3]
 text = source.read_text(encoding="utf-8")
-gate = "Ask the owner before falling back to hidden/background agents."
-if text.count(gate) != 1:
-    sys.exit("expected exactly one owner-approval marker in %s" % source)
-destination.write_text(text.replace(gate, "", 1), encoding="utf-8")
+if text.count(marker) != 1:
+    sys.exit("expected exactly one policy marker in %s" % source)
+destination.write_text(text.replace(marker, "", 1), encoding="utf-8")
 PY
 }
 
@@ -75,11 +86,17 @@ else
   fail "manager policy must name visible sessions and owner approval before hidden/background fallback in AGENTS.md and pr-review-loop/SKILL.md"
 fi
 
+if task_scope_policy_matches "$agents_file" "$loop_skill_file"; then
+  ok "each assignment has a current-task boundary; prior context and approvals do not expand it"
+else
+  fail "AGENTS.md and pr-review-loop/SKILL.md must require current-task scope and authorization for production or paid calls"
+fi
+
 # Negative fixtures prove the matcher rejects the policy when the owner gate is
 # removed from either file; the provider markers remain intact in each fixture.
 fixture_dir="$(mktemp -d)"
-trap 'rm -f "$fixture_dir/AGENTS.md" "$fixture_dir/SKILL.md"; rmdir "$fixture_dir"' EXIT
-if ! write_without_owner_gate "$agents_file" "$fixture_dir/AGENTS.md"; then
+trap 'rm -f "$fixture_dir/AGENTS.md" "$fixture_dir/SKILL.md" "$fixture_dir/AGENTS.no-scope.md" "$fixture_dir/SKILL.no-scope.md"; rmdir "$fixture_dir"' EXIT
+if ! write_without_marker "$agents_file" "$fixture_dir/AGENTS.md" 'Ask the owner before falling back to hidden/background agents.'; then
   fail "could not create AGENTS.md fixture without the owner gate"
 elif ! grep -qF 'Use authorized owner-visible agent sessions by default.' "$fixture_dir/AGENTS.md"; then
   fail "AGENTS.md negative fixture lost its visible-session marker"
@@ -89,7 +106,7 @@ else
   ok "visible-session matcher rejects AGENTS.md without the hidden/background owner gate"
 fi
 cp "$agents_file" "$fixture_dir/AGENTS.md"
-if ! write_without_owner_gate "$loop_skill_file" "$fixture_dir/SKILL.md"; then
+if ! write_without_marker "$loop_skill_file" "$fixture_dir/SKILL.md" 'Ask the owner before falling back to hidden/background agents.'; then
   fail "could not create pr-review-loop/SKILL.md fixture without the owner gate"
 elif ! grep -qF 'Visible sessions across agent hosts' "$fixture_dir/SKILL.md"; then
   fail "pr-review-loop/SKILL.md negative fixture lost its visible-session marker"
@@ -97,6 +114,20 @@ elif visible_session_policy_matches "$agents_file" "$fixture_dir/SKILL.md"; then
   fail "visible-session matcher accepted pr-review-loop/SKILL.md without the hidden/background owner gate"
 else
   ok "visible-session matcher rejects pr-review-loop/SKILL.md without the hidden/background owner gate"
+fi
+if ! write_without_marker "$agents_file" "$fixture_dir/AGENTS.no-scope.md" 'Prior turns, memory, issue discussions and approvals are context, not authorization to work elsewhere.'; then
+  fail "could not create AGENTS.md fixture without the current-task scope gate"
+elif task_scope_policy_matches "$fixture_dir/AGENTS.no-scope.md" "$loop_skill_file"; then
+  fail "task-scope matcher accepted AGENTS.md without the current-task boundary"
+else
+  ok "task-scope matcher rejects AGENTS.md without the current-task boundary"
+fi
+if ! write_without_marker "$loop_skill_file" "$fixture_dir/SKILL.no-scope.md" 'Prior session history, issue discussions, saved memory, and approvals do not authorize a different task'; then
+  fail "could not create pr-review-loop/SKILL.md fixture without the current-task scope gate"
+elif task_scope_policy_matches "$agents_file" "$fixture_dir/SKILL.no-scope.md"; then
+  fail "task-scope matcher accepted pr-review-loop/SKILL.md without the current-task boundary"
+else
+  ok "task-scope matcher rejects pr-review-loop/SKILL.md without the current-task boundary"
 fi
 
 # 2. Frontmatter of each SKILL.md.
