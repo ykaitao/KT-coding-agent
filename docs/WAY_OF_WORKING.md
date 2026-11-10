@@ -15,6 +15,18 @@ Delegated work runs in **visible sessions** the owner can open and watch, not in
 
 **The owner talks only to the manager.** The manager has full control of the other sessions: it starts them, briefs them, and passes on the owner's decisions. The owner never has to answer a question inside another session, so each session's permissions must allow its routine GitHub writes (see "Permissions" below).
 
+## Starting visible sessions
+
+The default is an owner-visible conversation or task session in the current agent host. Before starting a pair, inspect existing sessions in the repository's project, read their latest status, and reuse suitable idle sessions with stable handles. Do not interrupt an unrelated active task. Keep the owner-facing conversation in the manager session.
+
+| Host | Reuse a visible session | Start a visible session |
+|---|---|---|
+| Codex desktop | List and read project threads, then continue an idle matching thread. | Create a project-scoped local thread so it appears in the sidebar. |
+| Claude desktop | Reuse a visible desktop session with the right role. | Start named visible review and implement sessions in the desktop app. |
+| Other hosts | Use the provider's visible conversation or task list. | Start the provider's foreground, owner-visible task session. |
+
+Use that host's supported tools and preserve the handle-to-role mapping. Hidden/background subagents are not the default; if the host cannot provide visible sessions, explain that and ask the owner before using hidden delegation.
+
 ## The loop
 
 The full procedure is the [`pr-review-loop`](../skills/pr-review-loop/SKILL.md) skill. In short:
@@ -31,7 +43,7 @@ The full procedure is the [`pr-review-loop`](../skills/pr-review-loop/SKILL.md) 
 
 - **Trust only what's verified.** An agent's report is a claim. Check the result yourself (comment lines, commit IDs, changed files, replies) before telling anyone it's done. This loop exists because an early reviewer reported deleting comments it never deleted.
 - **Approvals belong to the owner, given to the manager.** Decisions such as merging come from the owner's own words to the manager. The owner has delegated control of the sessions to the manager. If a permission check blocks a review post in another session, the manager may post that session's saved draft, using only permissions the owner granted the manager, after checking that its `event` is `COMMENT`, its `commit_id` is the PR head, and every comment's `line` holds the text it's about. If the manager's own action is blocked, nobody works around it; the manager tells the owner which permission rule is missing.
-- **Isolate parallel work.** Sessions that share a checkout don't switch its branch under each other. Use `git worktree` for a second branch and remove the worktree afterwards. To run several PRs in parallel, give each its own implement/review pair and pick work that touches different files (see "Parallel pairs" in [`pr-review-loop`](../skills/pr-review-loop/SKILL.md)). Each implement session runs in its own worktree. `.claude/settings.local.json` is untracked, so new worktrees start without its permission rules and without the review-event guard hook; the manager copies it into each worktree, starts the session in that folder, and has it run a probe the guard must block before it does any work (see "Worktrees" in [`pr-review-loop`](../skills/pr-review-loop/SKILL.md)).
+- **Isolate parallel work.** Sessions that share a checkout don't switch its branch under each other. Use `git worktree` for a second branch and remove the worktree afterwards. To run several PRs in parallel, give each its own implement/review pair and pick work that touches different files (see "Parallel pairs" in [`pr-review-loop`](../skills/pr-review-loop/SKILL.md)). Each implement session runs in its own worktree, created with the host's managed worktree tool when available or from a fresh remote base. `.claude/settings.local.json` is untracked, so new Claude worktrees start without its permission rules and without the review-event guard hook; the manager copies it into each Claude worktree, starts the session in that folder, and has it run a probe the guard must block before it does any work. Codex and other providers do not run this Claude hook and follow the comment-only rule themselves.
 - **Small, honest diffs.** Docs describe what exists. Planned work is labelled as planned.
 - **Learn from each round.** After each round, judge whether the agents did a great job. If they did and the task will recur, capture it as a skill. If they didn't, fix the skill or the brief before the next round.
 

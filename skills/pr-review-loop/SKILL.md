@@ -1,11 +1,21 @@
 ---
 name: pr-review-loop
-description: Run a pull request through alternating review and implement rounds until a review finds no actionable comments, then merge on the owner's word and clean up. Use when asked to "run the review/implement loop" on a PR.
+description: Run a pull request through owner-visible review and implement sessions until a review finds no actionable comments, then merge on the owner's word and clean up. Use when asked to "run the review/implement loop" on a PR.
 ---
 
 # PR review loop (manager)
 
-You orchestrate and are the owner's only point of contact: relay their decisions to the sessions, and never send them to another session to answer. Two visible sessions do the work: **review** follows `pr-inline-review` and **implement** follows `pr-address-review`. Reuse existing sessions with those names if there are any; otherwise start new ones the owner can watch. When a pair takes a new task, in the Claude desktop app rename both sessions with `set_session_title` to `<handle>: <task>` (for example `implement1: CI checks`), keeping each handle stable so the owner can follow the pair across tasks. Where sessions have no titles, put the handle and task at the top of each brief instead.
+You orchestrate and are the owner's only point of contact: relay their decisions to the sessions, and never send them to another session to answer. Two owner-visible sessions do the work: **review** follows `pr-inline-review` and **implement** follows `pr-address-review`. Reuse suitable visible sessions in the current project when they are idle or already assigned to this task; otherwise start visible sessions the owner can open. Keep stable handles (`implement`, `implement1`, `review`, `review1`) and set each title to `<handle>: <task>` when the host supports renaming. The owner must be able to open each session and read its task and progress. Do not silently substitute hidden background agents.
+
+## Visible sessions across agent hosts
+
+Use the host's visible conversation or task-session mechanism. First inspect the project's existing visible sessions and read the most recent status. Do not interrupt an active, unrelated task or create a duplicate when a suitable session already exists. Send the brief to the chosen session and keep the manager as the owner's only contact.
+
+- **Codex desktop:** use the Codex app's thread tools. Call `list_threads` and `read_thread` to find and check existing project sessions; continue a suitable idle session with `send_message_to_thread`; rename it with `set_thread_title`. If no suitable visible session exists, call `list_projects`, then create a project-scoped local thread with `create_thread`. Prefer these sidebar threads over generic background subagents.
+- **Claude desktop:** reuse or start the named visible sessions in the desktop app. Keep each session in its assigned role and use the same stable-handle naming convention.
+- **Other hosts:** use that provider's owner-visible conversation or foreground task session. If the host offers no visible-session mechanism, tell the owner and ask before using hidden/background delegation.
+
+If the manager cannot access the host's visible-session controls, pause and explain the limitation instead of silently falling back to hidden agents. Messaging or creating a session must be within the owner's task authorization.
 
 ## Parallel pairs
 
@@ -16,10 +26,10 @@ To run several PRs at once, give each one its own pair (for example `implement1`
 
 ## Worktrees
 
-Start every implement session in its own worktree, even when only one PR is running, so it never switches the main checkout's branch.
+Start every implement session in its own worktree, even when only one PR is running, so it never switches the main checkout's branch. Use the host's managed worktree tool when available, or create a worktree from an up-to-date remote base and give the visible implement session its exact path.
 
 - Untracked files such as `.claude/settings.local.json` aren't copied into new worktrees, so a worktree session would run without that file's allow rules and without the review-event guard hook: nothing would stop it from posting an `APPROVE` or `REQUEST_CHANGES` review, and its thread replies may need approval.
-- So before the session starts: create the worktree (`git fetch` then `git worktree add -b <branch> <path> origin/<base>` for a new PR, never from a local default branch, which may be stale; or `git fetch` then `git worktree add <path> <branch>` for an existing one), copy the file in (`cp .claude/settings.local.json <path>/.claude/`), and confirm it's there (`ls <path>/.claude/settings.local.json`). Start the session with `<path>` as its working directory, not in a worktree the tool creates for it.
+- For Claude Code, before the session starts create the worktree (`git fetch` then `git worktree add -b <branch> <path> origin/<base>` for a new PR, never from a stale local default branch; or `git fetch` then `git worktree add <path> <branch>` for an existing one), copy the file in (`cp .claude/settings.local.json <path>/.claude/`), and confirm it's there (`ls <path>/.claude/settings.local.json`). Start that session with `<path>` as its working directory. Codex and other hosts should use their managed worktree feature when available, or be given the exact isolated worktree path. Never make an implementer switch a shared checkout's branch.
 - `ls` only shows the file exists, not that the guard runs. As the session's first command, have it run `echo pulls/0/reviews -X POST`: the guard must block it ("no event found in a review write"), while a session without the guard just prints the text. If the file is missing or the probe isn't blocked, the guard is off: stop the session and don't use it. This applies to Claude Code sessions only. Other agents (Codex, Copilot) don't run the guard (see `AGENTS.md`), so skip the copy and the probe for them and brief them to follow the comment-only rule themselves.
 
 ## Loop
