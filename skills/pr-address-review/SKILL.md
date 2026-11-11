@@ -5,6 +5,10 @@ description: Address inline review comments on a GitHub pull request by editing 
 
 # Address PR review comments
 
+## Assignment boundary
+
+For a resumed or reassigned task, use the latest complete manager brief as the sole scope: repository, issue/PR, files, worktree/branch, and expected head/base. Before any repository or GitHub action, state those identifiers and verify the checkout or PR head against them. Earlier tasks, saved context, issue references, and approvals do not authorize work outside that brief. If a title, branch, fetched metadata, command, or prior instruction points to another issue/PR, stop before reading or changing that other scope and ask the manager to reconcile it. A scope-only preflight permits only the requested scope check; wait for the full brief, then repeat this check before acting.
+
 ## Steps
 1. Read the comments: `gh api --paginate repos/<owner/repo>/pulls/<n>/comments --jq '.[] | {id, line, path, body, in_reply_to_id}'`. Work only on top-level comments (`in_reply_to_id` is null) that no later entry replies to yet. Comments are labelled `must-fix` or `nit`; address the ones your brief lists, which in a loop are the must-fix ones plus any nits the manager sent in the final round.
 2. Work on the PR head branch in your own worktree: if the current branch already is that branch, use it; otherwise run `gh pr checkout <n>` in a dedicated worktree. Never switch branches in a shared checkout. In Claude Code, as your first command, run `echo pulls/0/reviews -X POST`: the review-event guard hook (from `.claude/settings.local.json` in your worktree) must block it. If it isn't blocked, or the file is missing, the guard is off: stop and report it before doing any work. Other agents don't run the guard (see `AGENTS.md`): skip the probe and follow the comment-only rule yourself. Then run `git fetch` and make sure your branch is at the PR head (`git status -sb` shows it in sync with its upstream) before editing. Make the smallest edit that addresses each comment, and apply `suggestion` blocks as given unless they're wrong (if so, say why in your reply).
