@@ -65,6 +65,7 @@ task_scope_policy_matches() {
     && grep -qF 'Before the first repository or GitHub action in every resumed turn' "$skill_file" \
     && grep -qF 'Before reusing an idle thread for a different item than its most recent assignment' "$skill_file" \
     && grep -qF 'After a manager-confirmed re-brief, if the session starts acting on or resumes an unrelated issue/task' "$skill_file" \
+    && grep -qF 'After completing the assigned item and sending its final report, stop and wait for an explicit manager brief' "$skill_file" \
     && grep -qF 'Production reads are external actions too' "$skill_file"
 }
 
