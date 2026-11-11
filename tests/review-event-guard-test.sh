@@ -32,6 +32,15 @@ check() { # expected_exit command
   got=$?
   if [ "$got" -eq "$expected" ]; then echo "ok   $got  $cmd"; else echo "FAIL $got (want $expected)  $cmd"; fail=1; fi
 }
+check_blocked_because() { # reason_substring command: must exit 2 with that reason
+  local why=$1 cmd=$2 err got
+  err="$(printf '{"cwd":%s,"tool_input":{"command":%s}}' \
+    "$(jq -Rn --arg v "$tmp" '$v')" "$(jq -Rn --arg v "$cmd" '$v')" \
+    | python3 -I "$hook" 2>&1 >/dev/null)"
+  got=$?
+  if [ "$got" -eq 2 ] && [[ "$err" == *"$why"* ]]; then echo "ok   2  $cmd"
+  else echo "FAIL $got (want 2: $why; got: $err)  $cmd"; fail=1; fi
+}
 check_ask() { # command: a plain gh pr merge must exit 0 with an "ask" decision on stdout
   local cmd=$1 out got
   out="$(printf '{"cwd":%s,"tool_input":{"command":%s}}' \
@@ -195,6 +204,22 @@ check 2 'git km'
 check 2 'git kx'
 check 2 'env git km'
 check 2 'git -C . km'
+# A -C directory that doesn't exist yet (created earlier in the same command):
+# its config can't be read, so only built-in subcommands are allowed there.
+NOCHECK='could not check whether a git command is a shell alias'
+check 0 'git worktree add new-wt HEAD && git -C new-wt status'
+check 0 'git -C does-not-exist/deeper log --oneline -1'
+check_blocked_because "$NOCHECK" 'git -C does-not-exist km'
+check_blocked_because "$NOCHECK" 'mkdir -p new-dir && git -C new-dir/deeper km'
+check_blocked_because "$NOCHECK" 'git -C does-not-exist/deeper kco main'
+# kz is defined nowhere the hook can see, only in an evil.cfg the agent could write.
+check_blocked_because "$NOCHECK" 'git init x && cp evil.cfg x/.git/config && git -C x kz'
+check_blocked_because 'git config that writes an alias, an include' 'git init x && git -C x config include.path ../evil.cfg && git -C x kz'
+# include.* and includeIf.* pull in another config file, which can define aliases.
+check_blocked_because 'git config that writes an alias, an include' 'git config include.path ../evil.cfg'
+check_blocked_because 'git config that writes an alias, an include' 'git config includeIf.gitdir:~/x/.path ../evil.cfg'
+check_blocked_because 'git -c with an alias' 'git -c include.path=../evil.cfg km'
+check 0 'git config --get include.path'
 check 0 'git kco main'
 check 0 'git config --get alias.km'
 check 0 'git config user.name Test'
