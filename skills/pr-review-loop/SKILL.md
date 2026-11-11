@@ -9,6 +9,8 @@ You orchestrate and are the owner's only point of contact: relay their decisions
 
 ## Visible sessions across agent hosts
 
+- After a manager-confirmed re-brief, if the session starts acting on or resumes an unrelated issue/task, stop it and do not reuse it for that assignment; use another authorized visible session or ask the owner to start one.
+
 Use the host's visible conversation or task-session mechanism. First inspect the project's existing visible sessions and read the most recent status. Do not interrupt an active, unrelated task or create a duplicate when a suitable session already exists. Continue or start a session only when the owner's authorization covers that action. If no suitable authorized session exists, stop and ask the owner for authorization to create one or ask them to start it. Send the brief to the chosen session and keep the manager as the owner's only contact.
 
 - Before reusing an idle thread for a different item than its most recent assignment, send a scope-only preflight and wait for its reply. Require it to echo the repository, issue/PR, expected head/base, and worktree/branch, and to take no repository or GitHub action yet. Verify those details yourself before sending the work brief. If its reply points to another task or it starts work early, stop it and re-brief or use another authorized visible session.
