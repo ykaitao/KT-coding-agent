@@ -12,6 +12,7 @@
 #      honest mistakes, not a defence: it scans line by line (joining lines that
 #      end in a backslash), so text split across lines or fences, Unicode
 #      lookalikes, or reworded instructions can pass.
+#   6. manager instructions name the visible-session default, keep scope and approvals task-specific, and require owner approval before hidden/background fallback
 # Run from anywhere: bash tests/skills-check.sh
 # Private terms: one per line in $SKILLS_PRIVATE_TERMS
 # (default ~/.config/kt-coding-agent/private-terms.txt). Never commit that file.
@@ -37,6 +38,210 @@ for link in .claude/skills .agents/skills .github/skills; do
     ok "$link -> skills/"
   fi
 done
+
+# 1b. Check required policy wording in both files. This is a literal marker
+# check, not a semantic verification of the complete provider/tool contract.
+visible_session_policy_matches() {
+  local agents_file="$1"
+  local skill_file="$2"
+  grep -qF 'Use authorized owner-visible agent sessions by default.' "$agents_file" \
+    && grep -qF 'Ask the owner before falling back to hidden/background agents.' "$agents_file" \
+    && grep -qF 'Visible sessions across agent hosts' "$skill_file" \
+    && grep -qF 'Codex desktop' "$skill_file" \
+    && grep -qF 'Claude desktop' "$skill_file" \
+    && grep -qF 'Other hosts' "$skill_file" \
+    && grep -qF 'Ask the owner before falling back to hidden/background agents.' "$skill_file"
+}
+
+task_scope_policy_matches() {
+  local agents_file="$1"
+  local skill_file="$2"
+  grep -qF 'Use the current task boundary.' "$agents_file" \
+    && grep -qF 'Prior turns, memory, issue discussions and approvals are context, not authorization to work elsewhere.' "$agents_file" \
+    && grep -qF 'Before the first repository or GitHub action in every resumed turn' "$agents_file" \
+    && grep -qF 'Read-only production access and paid API calls require owner authorization for the current task' "$agents_file" \
+    && grep -qF 'Brief each session for one task' "$skill_file" \
+    && grep -qF 'Prior session history, issue discussions, saved memory, and approvals do not authorize a different task' "$skill_file" \
+    && grep -qF 'Before the first repository or GitHub action in every resumed turn' "$skill_file" \
+    && grep -qF 'Production reads are external actions too' "$skill_file"
+}
+
+failed_check_policy_matches() {
+  local skill_file="$1"
+  grep -qF 'Failed checks and owner/infrastructure gates' "$skill_file" \
+    && grep -qF 'inspect diagnostics for the exact PR head: read check-run annotations' "$skill_file" \
+    && grep -qF 'A job that never started has no steps or job log' "$skill_file" \
+    && grep -qF 'full PR head SHA' "$skill_file" \
+    && grep -qF 'owner action and where to take it' "$skill_file" \
+    && grep -qF 'PR description' "$skill_file"
+}
+
+failed_check_narrative_policy_matches() {
+  local skill_file="$1"
+  grep -qF 'For every failed required check, inspect diagnostics for the exact PR head' "$skill_file" \
+    && grep -qF 'read check-run annotations, determine whether the job started, and record its available steps or logs' "$skill_file" \
+    && grep -qF "Compare the PR description's CI narrative with those exact-head diagnostics" "$skill_file" \
+    && grep -qF 'correct stale head/status claims and remove claims about causes that the evidence does not support before handoff' "$skill_file" \
+    && grep -qF 'Classify a failure as an owner/infrastructure gate only when exact-head diagnostics support that conclusion' "$skill_file" \
+    && grep -qF 'If they do not establish the cause, say that it is unknown and do not guess whether the failure is an infrastructure or code failure' "$skill_file"
+}
+
+pr_body_evidence_policy_matches() {
+  local skill_file="$1"
+  grep -qF 'Before owner handoff, compare the PR description with the exact current head' "$skill_file" \
+    && grep -qF 'claimed behavior and quoted test values' "$skill_file" \
+    && grep -qF 'validation results and CI status at that same full SHA' "$skill_file" \
+    && grep -qF 'label older-head results as historical' "$skill_file"
+}
+
+serialized_limit_and_progress_policy_matches() {
+  local skill_file="$1"
+  grep -qF 'exact serialized or encoded representation sent over the wire' "$skill_file" \
+    && grep -qF 'pre-serialization estimate' "$skill_file" \
+    && grep -qF '100% means all work is complete' "$skill_file" \
+    && grep -qF 'per-item retries and fallbacks' "$skill_file" \
+    && grep -qF 'single isolated item' "$skill_file"
+}
+
+write_without_marker() {
+  python3 - "$1" "$2" "$3" <<'PY'
+import sys
+from pathlib import Path
+
+source, destination = map(Path, sys.argv[1:3])
+marker = sys.argv[3]
+text = source.read_text(encoding="utf-8")
+if text.count(marker) != 1:
+    sys.exit("expected exactly one policy marker in %s" % source)
+destination.write_text(text.replace(marker, "", 1), encoding="utf-8")
+PY
+}
+
+agents_file="$root/AGENTS.md"
+loop_skill_file="$skills_dir/pr-review-loop/SKILL.md"
+if visible_session_policy_matches "$agents_file" "$loop_skill_file"; then
+  ok "manager policy names visible sessions and owner approval before hidden/background fallback"
+else
+  fail "manager policy must name visible sessions and owner approval before hidden/background fallback in AGENTS.md and pr-review-loop/SKILL.md"
+fi
+
+if task_scope_policy_matches "$agents_file" "$loop_skill_file"; then
+  ok "each assignment has a current-task boundary; prior context and approvals do not expand it"
+else
+  fail "AGENTS.md and pr-review-loop/SKILL.md must require current-task scope and authorization for production or paid calls"
+fi
+
+if failed_check_policy_matches "$loop_skill_file"; then
+  ok "failed checks require current-head diagnostics, head-scoped gates and actionable PR owner gates"
+else
+  fail "pr-review-loop/SKILL.md must distinguish missing job logs from diagnostics and record current-head gates and owner actions"
+fi
+
+if failed_check_narrative_policy_matches "$loop_skill_file"; then
+  ok "failed-check CI narratives must match exact-head annotations, job state and available logs without guessing"
+else
+  fail "pr-review-loop/SKILL.md must compare failed-check CI narratives with exact-head annotations, job state and available logs"
+fi
+
+if pr_body_evidence_policy_matches "$loop_skill_file"; then
+  ok "owner handoff requires PR-body behavior, test and check evidence verified at the exact head"
+else
+  fail "pr-review-loop/SKILL.md must verify PR-body behavior, test values, validation and CI against the exact head before handoff"
+fi
+
+review_skill_file="$skills_dir/pr-inline-review/SKILL.md"
+if serialized_limit_and_progress_policy_matches "$review_skill_file"; then
+  ok "review guidance checks wire-representation limits and progress through retries/fallbacks"
+else
+  fail "pr-inline-review/SKILL.md must check serialized request limits and terminal progress across retries and fallbacks"
+fi
+
+# Negative fixtures prove the matchers reject policies with required markers
+# removed; unrelated policy markers remain intact in each fixture.
+fixture_dir="$(mktemp -d)"
+trap 'rm -f "$fixture_dir/AGENTS.md" "$fixture_dir/SKILL.md" "$fixture_dir/AGENTS.no-scope.md" "$fixture_dir/SKILL.no-scope.md" "$fixture_dir/AGENTS.no-resume-check.md" "$fixture_dir/SKILL.no-resume-check.md" "$fixture_dir/SKILL.no-check-diagnostics.md" "$fixture_dir/SKILL.no-failure-narrative.md" "$fixture_dir/SKILL.no-pr-body-evidence.md" "$fixture_dir/SKILL.no-wire-limit.md" "$fixture_dir/SKILL.no-progress-terminal.md"; rmdir "$fixture_dir"' EXIT
+if ! write_without_marker "$agents_file" "$fixture_dir/AGENTS.md" 'Ask the owner before falling back to hidden/background agents.'; then
+  fail "could not create AGENTS.md fixture without the owner gate"
+elif ! grep -qF 'Use authorized owner-visible agent sessions by default.' "$fixture_dir/AGENTS.md"; then
+  fail "AGENTS.md negative fixture lost its visible-session marker"
+elif visible_session_policy_matches "$fixture_dir/AGENTS.md" "$loop_skill_file"; then
+  fail "visible-session matcher accepted AGENTS.md without the hidden/background owner gate"
+else
+  ok "visible-session matcher rejects AGENTS.md without the hidden/background owner gate"
+fi
+cp "$agents_file" "$fixture_dir/AGENTS.md"
+if ! write_without_marker "$loop_skill_file" "$fixture_dir/SKILL.md" 'Ask the owner before falling back to hidden/background agents.'; then
+  fail "could not create pr-review-loop/SKILL.md fixture without the owner gate"
+elif ! grep -qF 'Visible sessions across agent hosts' "$fixture_dir/SKILL.md"; then
+  fail "pr-review-loop/SKILL.md negative fixture lost its visible-session marker"
+elif visible_session_policy_matches "$agents_file" "$fixture_dir/SKILL.md"; then
+  fail "visible-session matcher accepted pr-review-loop/SKILL.md without the hidden/background owner gate"
+else
+  ok "visible-session matcher rejects pr-review-loop/SKILL.md without the hidden/background owner gate"
+fi
+if ! write_without_marker "$agents_file" "$fixture_dir/AGENTS.no-scope.md" 'Prior turns, memory, issue discussions and approvals are context, not authorization to work elsewhere.'; then
+  fail "could not create AGENTS.md fixture without the current-task scope gate"
+elif task_scope_policy_matches "$fixture_dir/AGENTS.no-scope.md" "$loop_skill_file"; then
+  fail "task-scope matcher accepted AGENTS.md without the current-task boundary"
+else
+  ok "task-scope matcher rejects AGENTS.md without the current-task boundary"
+fi
+if ! write_without_marker "$loop_skill_file" "$fixture_dir/SKILL.no-scope.md" 'Prior session history, issue discussions, saved memory, and approvals do not authorize a different task'; then
+  fail "could not create pr-review-loop/SKILL.md fixture without the current-task scope gate"
+elif task_scope_policy_matches "$agents_file" "$fixture_dir/SKILL.no-scope.md"; then
+  fail "task-scope matcher accepted pr-review-loop/SKILL.md without the current-task boundary"
+else
+  ok "task-scope matcher rejects pr-review-loop/SKILL.md without the current-task boundary"
+fi
+if ! write_without_marker "$agents_file" "$fixture_dir/AGENTS.no-resume-check.md" 'Before the first repository or GitHub action in every resumed turn'; then
+  fail "could not create AGENTS.md fixture without the resumed-turn scope check"
+elif task_scope_policy_matches "$fixture_dir/AGENTS.no-resume-check.md" "$loop_skill_file"; then
+  fail "task-scope matcher accepted AGENTS.md without the resumed-turn scope check"
+else
+  ok "task-scope matcher rejects AGENTS.md without the resumed-turn scope check"
+fi
+if ! write_without_marker "$loop_skill_file" "$fixture_dir/SKILL.no-resume-check.md" 'Before the first repository or GitHub action in every resumed turn'; then
+  fail "could not create pr-review-loop/SKILL.md fixture without the resumed-turn scope check"
+elif task_scope_policy_matches "$agents_file" "$fixture_dir/SKILL.no-resume-check.md"; then
+  fail "task-scope matcher accepted pr-review-loop/SKILL.md without the resumed-turn scope check"
+else
+  ok "task-scope matcher rejects pr-review-loop/SKILL.md without the resumed-turn scope check"
+fi
+if ! write_without_marker "$loop_skill_file" "$fixture_dir/SKILL.no-check-diagnostics.md" 'inspect diagnostics for the exact PR head: read check-run annotations'; then
+  fail "could not create pr-review-loop/SKILL.md fixture without the failed-check diagnostics marker"
+elif failed_check_policy_matches "$fixture_dir/SKILL.no-check-diagnostics.md"; then
+  fail "failed-check matcher accepted pr-review-loop/SKILL.md without current-head diagnostics"
+else
+  ok "failed-check matcher rejects pr-review-loop/SKILL.md without current-head diagnostics"
+fi
+if ! write_without_marker "$loop_skill_file" "$fixture_dir/SKILL.no-failure-narrative.md" "Compare the PR description's CI narrative with those exact-head diagnostics"; then
+  fail "could not create pr-review-loop/SKILL.md fixture without the CI-narrative comparison marker"
+elif failed_check_narrative_policy_matches "$fixture_dir/SKILL.no-failure-narrative.md"; then
+  fail "failed-check narrative matcher accepted pr-review-loop/SKILL.md without CI-narrative comparison"
+else
+  ok "failed-check narrative matcher rejects pr-review-loop/SKILL.md without CI-narrative comparison"
+fi
+if ! write_without_marker "$loop_skill_file" "$fixture_dir/SKILL.no-pr-body-evidence.md" 'Before owner handoff, compare the PR description with the exact current head'; then
+  fail "could not create pr-review-loop/SKILL.md fixture without the PR-body evidence marker"
+elif pr_body_evidence_policy_matches "$fixture_dir/SKILL.no-pr-body-evidence.md"; then
+  fail "PR-body evidence matcher accepted pr-review-loop/SKILL.md without exact-head handoff verification"
+else
+  ok "PR-body evidence matcher rejects pr-review-loop/SKILL.md without exact-head handoff verification"
+fi
+if ! write_without_marker "$review_skill_file" "$fixture_dir/SKILL.no-wire-limit.md" 'exact serialized or encoded representation sent over the wire'; then
+  fail "could not create pr-inline-review/SKILL.md fixture without the wire-limit marker"
+elif serialized_limit_and_progress_policy_matches "$fixture_dir/SKILL.no-wire-limit.md"; then
+  fail "review matcher accepted pr-inline-review/SKILL.md without wire-representation limits"
+else
+  ok "review matcher rejects pr-inline-review/SKILL.md without wire-representation limits"
+fi
+if ! write_without_marker "$review_skill_file" "$fixture_dir/SKILL.no-progress-terminal.md" '100% means all work is complete'; then
+  fail "could not create pr-inline-review/SKILL.md fixture without the terminal-progress marker"
+elif serialized_limit_and_progress_policy_matches "$fixture_dir/SKILL.no-progress-terminal.md"; then
+  fail "review matcher accepted pr-inline-review/SKILL.md without terminal-progress checks"
+else
+  ok "review matcher rejects pr-inline-review/SKILL.md without terminal-progress checks"
+fi
 
 # 2. Frontmatter of each SKILL.md.
 existing=""

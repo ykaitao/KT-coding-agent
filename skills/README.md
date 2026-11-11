@@ -20,7 +20,7 @@ The overall process is described in [`docs/WAY_OF_WORKING.md`](../docs/WAY_OF_WO
 
 ## Verifying discovery
 
-First run the structural check from the repo root. It confirms the three symlinks resolve to `skills/`, each `SKILL.md` has frontmatter with a `name` matching its folder and a non-empty `description`, and the list above matches the skill folders:
+First run the structural check from the repo root. It confirms `.claude/skills`, `.agents/skills` and `.github/skills` are symlinks to the same `skills/` source, each `SKILL.md` has frontmatter with a `name` matching its folder and a non-empty `description`, and the list above matches the skill folders:
 
 ```bash
 bash tests/skills-check.sh
@@ -29,6 +29,7 @@ bash tests/skills-check.sh
 Then check that each provider actually finds the skills. Open the repo root and ask:
 
 - **Claude Code** (reads `.claude/skills`): ask "which skills are available?". All skills above should be listed.
+- **Codex desktop** (expected to read `.agents/skills`; unverified): open the repository and ask "which skills are available?". For manager tasks, also confirm the visible-session instructions in `pr-review-loop` are available.
 - **Codex CLI** (expected to read `.agents/skills`; unverified): `codex exec --sandbox read-only "list the skills available to you"`. The default model may be unsupported for your account; pass a supported one with `-m <model>`.
 - **GitHub Copilot in VS Code** (expected to read `.github/skills`; unverified): in Copilot Chat agent mode, ask "which skills are available?".
 

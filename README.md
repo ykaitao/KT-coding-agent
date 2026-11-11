@@ -6,15 +6,15 @@ Helps developers deliver high-quality software faster with AI coding tools such 
 
 | Asset | What it does |
 | --- | --- |
-| [`skills/pr-review-loop`](skills/pr-review-loop/SKILL.md) | The manager's loop: alternate review and implement rounds on a PR until a review is clean, then merge on the owner's word. |
+| [`skills/pr-review-loop`](skills/pr-review-loop/SKILL.md) | The manager's loop: use owner-visible review and implement sessions, alternate rounds until a review is clean, then merge on the owner's word. |
 | [`skills/pr-inline-review`](skills/pr-inline-review/SKILL.md) | Review a PR and post line-checked inline comments as one `COMMENT` review. |
 | [`skills/pr-address-review`](skills/pr-address-review/SKILL.md) | Address review comments, push, and reply in each thread. |
 | [`docs/WAY_OF_WORKING.md`](docs/WAY_OF_WORKING.md) | The process: roles, principles, permissions and how to adopt it. |
 | [`.claude/hooks/review-event-guard.py`](.claude/hooks/review-event-guard.py) and [its tests](tests/review-event-guard-test.sh) | A Claude Code PreToolUse hook that blocks PR reviews whose event isn't `COMMENT`, so review permission can't approve. |
-| [`tests/skills-check.sh`](tests/skills-check.sh) | Checks the provider symlinks, each `SKILL.md`'s frontmatter, and the skill list in [`skills/README.md`](skills/README.md). |
+| [`tests/skills-check.sh`](tests/skills-check.sh) | Checks provider symlinks, required visible-session, current-task scope and owner-approval wording, each `SKILL.md`'s frontmatter, and the skill list in [`skills/README.md`](skills/README.md). The wording check is structural, not a semantic check of the full host tool contract. |
 | [CI](.github/workflows/ci.yml) | On every PR and push to `master`: the review-event guard tests and Markdown lint. |
 
-Skills live once in `skills/`; `.claude/skills`, `.agents/skills` and `.github/skills` are symlinks to it. Discovery is confirmed for Claude Code only. Codex (`.agents/skills`) and GitHub Copilot (`.github/skills`) discovery is **unverified**; see [Verifying discovery](skills/README.md#verifying-discovery).
+Skills live once in `skills/`; `.claude/skills`, `.agents/skills` and `.github/skills` are symlinks to the same source, so provider copies cannot drift. Structural symlinks are checked by `tests/skills-check.sh`; runtime skill discovery is a separate check. Claude Code discovery is confirmed, while Codex and GitHub Copilot discovery remains **unverified**; see [Verifying discovery](skills/README.md#verifying-discovery). The review-loop skill directs managers to use authorized owner-visible sessions by default and to ask the owner before a hidden/background fallback.
 
 ## Quick start (about 5 minutes)
 
