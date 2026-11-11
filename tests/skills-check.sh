@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Checks that every provider sees the same, well-formed skills:
-#   1. .claude/skills, .agents/skills and .github/skills are symlinks to skills/
+#   1. .claude/skills, .agents/skills and .github/skills are symlinks to skills/, or real
+#      directories holding a link to each skills/<name>
 #   2. each skills/*/SKILL.md has frontmatter with a matching name and a description
 #   3. skills/README.md lists exactly the skills that exist
 #   4. no file under skills/ leaks home paths, emails, tokens, other repos'
@@ -30,8 +31,22 @@ fail() { echo "FAIL $1"; failures=$((failures + 1)); }
 # 1. Provider symlinks.
 for link in .claude/skills .agents/skills .github/skills; do
   path="$root/$link"
-  if [ ! -L "$path" ]; then
-    fail "$link is not a symlink"
+  if [ -d "$path" ] && [ ! -L "$path" ]; then
+    # Per-skill layout: the folder keeps the project's own skills plus a link to each of ours.
+    missing=""
+    for dir in "$skills_dir"/*/; do
+      name="$(basename "$dir")"
+      if [ ! -L "$path/$name" ] || [ "$(cd "$path/$name" 2>/dev/null && pwd -P)" != "$skills_dir/$name" ]; then
+        missing="$missing $name"
+      fi
+    done
+    if [ -n "$missing" ]; then
+      fail "$link is a real directory without links to skills/ for:$missing"
+    else
+      ok "$link holds a link to each skill in skills/"
+    fi
+  elif [ ! -L "$path" ]; then
+    fail "$link is not a symlink or a directory"
   elif [ "$(cd "$path" 2>/dev/null && pwd -P)" != "$skills_dir" ]; then
     fail "$link does not resolve to skills/ (points to $(readlink "$path"))"
   else

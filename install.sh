@@ -83,15 +83,31 @@ for rel in docs/WAY_OF_WORKING.md AGENTS.md .claude/hooks/review-event-guard.py 
   copy_file "$rel"
 done
 
-# 3. Provider symlinks, refusing to replace a real skills directory.
+# 3. Provider symlinks. A provider folder that is already a real directory keeps its
+# contents and gets one link per skill instead; nothing in it is replaced.
+skill_names() { # the skills that will be in skills/ after the install
+  { for dir in "$src"/skills/*/ "$target"/skills/*/; do [ -f "$dir/SKILL.md" ] && basename "$dir"; done; } | sort -u
+}
 for d in .claude .agents .github; do
   link="$target/$d/skills"
   if [ -L "$link" ] && [ "$(readlink "$link")" = "../skills" ]; then
     echo "skipped $d/skills (symlink already in place)"
   elif [ -L "$link" ]; then
     echo "skipped $d/skills: it is a symlink to $(readlink "$link"), not ../skills; change it by hand"
+  elif [ -d "$link" ]; then
+    echo "$d/skills is a real directory: linking each skill into it"
+    for name in $(skill_names); do
+      entry="$link/$name"
+      if [ -L "$entry" ] && [ "$(readlink "$entry")" = "../../skills/$name" ]; then
+        echo "skipped $d/skills/$name (link already in place)"
+      elif [ -e "$entry" ] || [ -L "$entry" ]; then
+        echo "skipped $d/skills/$name: it already exists and isn't a link to skills/$name; the project's own copy wins, so rename one of them"
+      else
+        do_ "link $d/skills/$name -> ../../skills/$name" ln -s "../../skills/$name" "$entry"
+      fi
+    done
   elif [ -e "$link" ]; then
-    echo "skipped $d/skills: it exists and is not a symlink; move its contents into skills/ first"
+    echo "skipped $d/skills: it exists and is not a directory or symlink; remove or rename it"
   else
     do_ "link $d/skills -> ../skills" sh -c 'mkdir -p "$1" && ln -sfn ../skills "$1/skills"' _ "$target/$d"
   fi
@@ -120,12 +136,25 @@ else
   printf '%s\n' "$hook_block"
 fi
 
+# 5. Keep the per-user settings file out of commits, through the repo's local exclude file.
+if git -C "$target" check-ignore -q .claude/settings.local.json; then
+  echo "skipped git exclude: .claude/settings.local.json is already ignored"
+else
+  exclude="$(cd "$target" && git rev-parse --git-path info/exclude)"
+  case "$exclude" in /*) ;; *) exclude="$target/$exclude" ;; esac
+  do_ "add .claude/settings.local.json to $(git -C "$target" rev-parse --git-path info/exclude) (local, never committed)" \
+    sh -c 'mkdir -p "$(dirname "$1")" && printf "%s\n" "/.claude/settings.local.json" >> "$1"' _ "$exclude"
+fi
+
 if [ "$manual_merge" = 1 ]; then
   echo "skills/ already existed: add the new skills to your skills/README.md under '## Skills', using the entries in $src/skills/README.md"
 fi
-echo "add the allow rules for each role: see 'Permissions' in docs/WAY_OF_WORKING.md"
+if ! cmp -s "$src/AGENTS.md" "$target/AGENTS.md" && [ -e "$target/AGENTS.md" ]; then
+  echo "AGENTS.md already existed: add a link to docs/WAY_OF_WORKING.md and the 'Rules for every agent' from $src/AGENTS.md to yours"
+fi
+echo "next step: add the allow rules for each role from 'Permissions' in docs/WAY_OF_WORKING.md to .claude/settings.local.json, or every review post and reply will ask for approval"
 
-# 5. Checks.
+# 6. Checks.
 # conflicts <skills dir>: warns about clashes with the user's own skills; never fails the install.
 conflicts() {
   echo "checking for conflicts with your own skills (names and paths only):"

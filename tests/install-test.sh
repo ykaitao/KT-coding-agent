@@ -117,4 +117,69 @@ check "conflict: same-name warning printed" grep -q "WARN same name (folder and 
 check "conflict: Claude Code winner named" grep -q "Claude Code loads the personal copy" <<<"$out"
 rm -rf "$tmp/home"
 
+is_real_dir() { [ -d "$1" ] && [ ! -L "$1" ]; }
+
+# 10. Existing real .claude/skills and .agents/skills: one link per skill, nothing replaced.
+t="$(new_repo real-skill-dirs)"
+mkdir -p "$t/.claude/skills/team-notes" "$t/.agents/skills"
+printf 'ours\n' > "$t/.claude/skills/team-notes/SKILL.md"
+out="$(bash "$installer" "$t" 2>&1)"; code=$?
+check "real skill dirs: exit 0" [ "$code" -eq 0 ]
+check "real skill dirs: own skill untouched" [ "$(cat "$t/.claude/skills/team-notes/SKILL.md")" = "ours" ]
+for d in .claude .agents; do
+  check "real skill dirs: $d/skills still a real directory" is_real_dir "$t/$d/skills"
+  for s in "$root"/skills/*/; do
+    name="$(basename "$s")"
+    check "real skill dirs: $d/skills/$name links to skills/$name" [ "$(readlink "$t/$d/skills/$name")" = "../../skills/$name" ]
+  done
+done
+check "real skill dirs: .github/skills symlink" is_link "$t" .github
+check "real skill dirs: skills check passes" grep -q '^ok   tests/skills-check.sh' <<<"$out"
+before="$(snapshot "$t")"
+out="$(bash "$installer" "$t" 2>&1)"; code=$?
+check "real skill dirs rerun: exit 0" [ "$code" -eq 0 ]
+check "real skill dirs rerun: nothing changed" [ "$before" = "$(snapshot "$t")" ]
+check "real skill dirs rerun: nothing linked again" [ -z "$(grep -E '^(copy|link|write|add) ' <<<"$out")" ]
+
+# 11. A project skill with the same name in a real folder: kept, reported, never replaced.
+t="$(new_repo real-skill-dir-collision)"
+mkdir -p "$t/.claude/skills/pr-review-loop"
+printf 'ours\n' > "$t/.claude/skills/pr-review-loop/SKILL.md"
+out="$(bash "$installer" "$t" 2>&1)"; code=$?
+check "collision in real dir: project copy untouched" [ "$(cat "$t/.claude/skills/pr-review-loop/SKILL.md")" = "ours" ]
+check "collision in real dir: not a link" [ ! -L "$t/.claude/skills/pr-review-loop" ]
+check "collision in real dir: reported" grep -q "skipped .claude/skills/pr-review-loop: it already exists" <<<"$out"
+check "collision in real dir: other skills linked" [ -L "$t/.claude/skills/pr-inline-review" ]
+check "collision in real dir: exit non-zero" [ "$code" -ne 0 ]
+check "collision in real dir: failure is the skills check" grep -q '^FAIL tests/skills-check.sh' <<<"$out"
+
+# 12. .claude/settings.local.json is git-ignored through .git/info/exclude, once.
+t="$(new_repo exclude)"
+bash "$installer" "$t" >/dev/null 2>&1
+check "exclude: settings file ignored" git -C "$t" check-ignore -q .claude/settings.local.json
+check "exclude: listed in .git/info/exclude" grep -qx "/.claude/settings.local.json" "$t/.git/info/exclude"
+check "exclude: settings file not untracked" [ -z "$(git -C "$t" status --porcelain --untracked-files=all .claude/settings.local.json)" ]
+out="$(bash "$installer" "$t" 2>&1)"
+check "exclude rerun: line not added twice" [ "$(grep -cx "/.claude/settings.local.json" "$t/.git/info/exclude")" -eq 1 ]
+check "exclude rerun: reported as already ignored" grep -q "already ignored" <<<"$out"
+t="$(new_repo exclude-gitignore)"
+printf '.claude/settings.local.json\n' > "$t/.gitignore"
+exclude_before="$(cat "$t/.git/info/exclude" 2>/dev/null)"
+bash "$installer" "$t" >/dev/null 2>&1
+check "exclude: left alone when .gitignore already covers it" [ "$exclude_before" = "$(cat "$t/.git/info/exclude" 2>/dev/null)" ]
+t="$(new_repo exclude-dry)"
+exclude_before="$(cat "$t/.git/info/exclude" 2>/dev/null)"
+bash "$installer" --dry-run "$t" >/dev/null 2>&1
+check "exclude: dry run leaves it alone" [ "$exclude_before" = "$(cat "$t/.git/info/exclude" 2>/dev/null)" ]
+
+# 13. Next-step hints: AGENTS.md merge hint when one exists, and the permissions step.
+t="$(new_repo hints)"
+printf 'my agents\n' > "$t/AGENTS.md"
+out="$(bash "$installer" "$t" 2>&1)"
+check "hints: AGENTS.md merge hint" grep -q "AGENTS.md already existed: add a link to docs/WAY_OF_WORKING.md" <<<"$out"
+check "hints: permissions next step" grep -q "^next step: add the allow rules .*Permissions" <<<"$out"
+t="$(new_repo no-agents-hint)"
+out="$(bash "$installer" "$t" 2>&1)"
+check "hints: no AGENTS.md hint on a clean install" [ -z "$(grep 'AGENTS.md already existed' <<<"$out")" ]
+
 exit "$fail"
