@@ -15,6 +15,7 @@ The skills live here. `.agents/skills`, `.claude/skills` and `.github/skills` ar
 - [`branch-worktree-cleanup`](branch-worktree-cleanup/SKILL.md): audit branches and worktrees, keep useful unmerged work, and safely remove stale local state.
 - [`propose-skill`](propose-skill/SKILL.md): turn private experience into a new public skill without leaking anything, then propose it as a pull request.
 - [`repo-spec-write`](repo-spec-write/SKILL.md): turn a vague request or bug report into a spec with evidence, observable acceptance criteria, non-goals and open questions for the owner.
+- [`code-test-design`](code-test-design/SKILL.md): review the tests for a piece of code and report proven gaps: untested behaviour, missing edge cases, tests that pass for the wrong reason, and flaky patterns.
 
 The overall process is described in [`docs/WAY_OF_WORKING.md`](../docs/WAY_OF_WORKING.md).
 
