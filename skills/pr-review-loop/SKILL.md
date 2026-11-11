@@ -9,7 +9,11 @@ You orchestrate and are the owner's only point of contact: relay their decisions
 
 ## Visible sessions across agent hosts
 
+- After a manager-confirmed re-brief, if the session starts acting on or resumes an unrelated issue/task, stop it and do not reuse it for that assignment; use another authorized visible session or ask the owner to start one.
+
 Use the host's visible conversation or task-session mechanism. First inspect the project's existing visible sessions and read the most recent status. Do not interrupt an active, unrelated task or create a duplicate when a suitable session already exists. Continue or start a session only when the owner's authorization covers that action. If no suitable authorized session exists, stop and ask the owner for authorization to create one or ask them to start it. Send the brief to the chosen session and keep the manager as the owner's only contact.
+
+- Before reusing an idle thread for a different item than its most recent assignment, send a scope-only preflight and wait for its reply. Require it to echo the repository, issue/PR, expected head/base, and worktree/branch, and to take no repository or GitHub action yet. Verify those details yourself before sending the work brief. If its reply points to another task or it starts work early, stop it and re-brief or use another authorized visible session.
 
 - **Codex desktop:** use the Codex app's thread tools. Call `list_threads` and `read_thread` to find and check existing project sessions; continue a suitable idle session only when the owner's request authorizes the follow-up; rename it with `set_thread_title` when authorized. Call `create_thread` only when the human explicitly asks for a new visible task/thread. If no suitable authorized session exists, stop and ask the owner to explicitly authorize a new visible thread or start it themselves. A `create_thread` request that also targets a worktree requires explicit authorization for that worktree too. Do not substitute a hidden agent or shared checkout when authorization is missing.
 - **Claude desktop:** reuse or start the named visible sessions in the desktop app only when the owner's request authorizes that action. Otherwise ask the owner to authorize or start the visible session. Keep each session in its assigned role and use the same stable-handle naming convention.
@@ -20,6 +24,10 @@ If the manager cannot access the host's visible-session controls, pause and expl
 ## Brief each session for one task
 
 For every new or resumed session, make the latest manager prompt the explicit task boundary: name the repository, issue or PR, deliverable, allowed external services or calls (with a request cap when relevant), and exclusions. Before the first repository or GitHub action in every resumed turn, state the repository and issue/PR from that brief, then verify the checkout or PR head against it; if the thread title, branch, or fetched metadata points elsewhere, stop and confirm the scope with the manager. Prior session history, issue discussions, saved memory, and approvals do not authorize a different task or carry over to a new assignment. If a resumed session starts following stale instructions, stop it and re-brief it before it reads other issues, calls external services, or edits files. Production reads are external actions too; production access and paid API calls need owner authorization for the current task, and retries count against any approved cap. The manager remains the owner's only contact and relays any question or needed authorization.
+
+After completing the assigned item and sending its final report, stop and wait for an explicit manager brief before reading or acting on another issue or PR, even if it appeared in older batch instructions.
+
+A later user request to the manager is not an active peer reassignment until the manager relays a new scoped brief. If the request is outside the peer's current assignment, the peer should report it and wait.
 
 ## Parallel pairs
 
