@@ -65,6 +65,7 @@ task_scope_policy_matches() {
     && grep -qF 'Before the first repository or GitHub action in every resumed turn' "$skill_file" \
     && grep -qF 'Before reusing an idle thread for a different item than its most recent assignment' "$skill_file" \
     && grep -qF 'After a manager-confirmed re-brief, if the session starts acting on or resumes an unrelated issue/task' "$skill_file" \
+    && grep -qF 'A later user request to the manager is not an active peer reassignment until the manager relays a new scoped brief.' "$skill_file" \
     && grep -qF 'After completing the assigned item and sending its final report, stop and wait for an explicit manager brief' "$skill_file" \
     && grep -qF 'Production reads are external actions too' "$skill_file"
 }
@@ -162,7 +163,7 @@ fi
 # Negative fixtures prove the matchers reject policies with required markers
 # removed; unrelated policy markers remain intact in each fixture.
 fixture_dir="$(mktemp -d)"
-trap 'rm -f "$fixture_dir/AGENTS.md" "$fixture_dir/SKILL.md" "$fixture_dir/AGENTS.no-scope.md" "$fixture_dir/SKILL.no-scope.md" "$fixture_dir/AGENTS.no-resume-check.md" "$fixture_dir/SKILL.no-resume-check.md" "$fixture_dir/SKILL.no-check-diagnostics.md" "$fixture_dir/SKILL.no-failure-narrative.md" "$fixture_dir/SKILL.no-pr-body-evidence.md" "$fixture_dir/SKILL.no-wire-limit.md" "$fixture_dir/SKILL.no-progress-terminal.md" "$fixture_dir/SKILL.no-reuse-preflight.md" "$fixture_dir/SKILL.no-reuse-after-drift.md"; rmdir "$fixture_dir"' EXIT
+trap 'rm -f "$fixture_dir/AGENTS.md" "$fixture_dir/SKILL.md" "$fixture_dir/AGENTS.no-scope.md" "$fixture_dir/SKILL.no-scope.md" "$fixture_dir/AGENTS.no-resume-check.md" "$fixture_dir/SKILL.no-resume-check.md" "$fixture_dir/SKILL.no-check-diagnostics.md" "$fixture_dir/SKILL.no-failure-narrative.md" "$fixture_dir/SKILL.no-pr-body-evidence.md" "$fixture_dir/SKILL.no-wire-limit.md" "$fixture_dir/SKILL.no-progress-terminal.md" "$fixture_dir/SKILL.no-reuse-preflight.md" "$fixture_dir/SKILL.no-reuse-after-drift.md" "$fixture_dir/SKILL.no-manager-relay.md"; rmdir "$fixture_dir"' EXIT
 if ! write_without_marker "$agents_file" "$fixture_dir/AGENTS.md" 'Ask the owner before falling back to hidden/background agents.'; then
   fail "could not create AGENTS.md fixture without the owner gate"
 elif ! grep -qF 'Use authorized owner-visible agent sessions by default.' "$fixture_dir/AGENTS.md"; then
@@ -223,6 +224,13 @@ elif task_scope_policy_matches "$agents_file" "$fixture_dir/SKILL.no-reuse-after
   fail "task-scope matcher accepted pr-review-loop/SKILL.md without the repeated-scope-drift stop rule"
 else
   ok "task-scope matcher rejects pr-review-loop/SKILL.md without the repeated-scope-drift stop rule"
+fi
+if ! write_without_marker "$loop_skill_file" "$fixture_dir/SKILL.no-manager-relay.md" 'A later user request to the manager is not an active peer reassignment until the manager relays a new scoped brief.'; then
+  fail "could not create pr-review-loop/SKILL.md fixture without the manager-relayed reassignment rule"
+elif task_scope_policy_matches "$agents_file" "$fixture_dir/SKILL.no-manager-relay.md"; then
+  fail "task-scope matcher accepted pr-review-loop/SKILL.md without the manager-relayed reassignment rule"
+else
+  ok "task-scope matcher rejects pr-review-loop/SKILL.md without the manager-relayed reassignment rule"
 fi
 if ! write_without_marker "$loop_skill_file" "$fixture_dir/SKILL.no-check-diagnostics.md" 'inspect diagnostics for the exact PR head: read check-run annotations'; then
   fail "could not create pr-review-loop/SKILL.md fixture without the failed-check diagnostics marker"

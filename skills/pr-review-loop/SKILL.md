@@ -27,6 +27,8 @@ For every new or resumed session, make the latest manager prompt the explicit ta
 
 After completing the assigned item and sending its final report, stop and wait for an explicit manager brief before reading or acting on another issue or PR, even if it appeared in older batch instructions.
 
+A later user request to the manager is not an active peer reassignment until the manager relays a new scoped brief. If the request is outside the peer's current assignment, the peer should report it and wait.
+
 ## Parallel pairs
 
 To run several PRs at once, give each one its own pair (for example `implement1`/`review1`), and only run as many pairs as you can verify properly; two worked well. Free disk space limits it too, since each authorized implement session needs its own worktree: before starting another pair, check free space with `df -h .` and start it only if that exceeds the size of one existing worktree (`du -sh <worktree>`) plus its build output, and remove each worktree and its branches right after its PR merges (see "Finish").
