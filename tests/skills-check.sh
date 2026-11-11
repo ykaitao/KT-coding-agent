@@ -63,6 +63,7 @@ task_scope_policy_matches() {
     && grep -qF 'Brief each session for one task' "$skill_file" \
     && grep -qF 'Prior session history, issue discussions, saved memory, and approvals do not authorize a different task' "$skill_file" \
     && grep -qF 'Before the first repository or GitHub action in every resumed turn' "$skill_file" \
+    && grep -qF 'Before reusing an idle thread for a different item than its most recent assignment' "$skill_file" \
     && grep -qF 'Production reads are external actions too' "$skill_file"
 }
 
@@ -159,7 +160,7 @@ fi
 # Negative fixtures prove the matchers reject policies with required markers
 # removed; unrelated policy markers remain intact in each fixture.
 fixture_dir="$(mktemp -d)"
-trap 'rm -f "$fixture_dir/AGENTS.md" "$fixture_dir/SKILL.md" "$fixture_dir/AGENTS.no-scope.md" "$fixture_dir/SKILL.no-scope.md" "$fixture_dir/AGENTS.no-resume-check.md" "$fixture_dir/SKILL.no-resume-check.md" "$fixture_dir/SKILL.no-check-diagnostics.md" "$fixture_dir/SKILL.no-failure-narrative.md" "$fixture_dir/SKILL.no-pr-body-evidence.md" "$fixture_dir/SKILL.no-wire-limit.md" "$fixture_dir/SKILL.no-progress-terminal.md"; rmdir "$fixture_dir"' EXIT
+trap 'rm -f "$fixture_dir/AGENTS.md" "$fixture_dir/SKILL.md" "$fixture_dir/AGENTS.no-scope.md" "$fixture_dir/SKILL.no-scope.md" "$fixture_dir/AGENTS.no-resume-check.md" "$fixture_dir/SKILL.no-resume-check.md" "$fixture_dir/SKILL.no-check-diagnostics.md" "$fixture_dir/SKILL.no-failure-narrative.md" "$fixture_dir/SKILL.no-pr-body-evidence.md" "$fixture_dir/SKILL.no-wire-limit.md" "$fixture_dir/SKILL.no-progress-terminal.md" "$fixture_dir/SKILL.no-reuse-preflight.md"; rmdir "$fixture_dir"' EXIT
 if ! write_without_marker "$agents_file" "$fixture_dir/AGENTS.md" 'Ask the owner before falling back to hidden/background agents.'; then
   fail "could not create AGENTS.md fixture without the owner gate"
 elif ! grep -qF 'Use authorized owner-visible agent sessions by default.' "$fixture_dir/AGENTS.md"; then
@@ -206,6 +207,13 @@ elif task_scope_policy_matches "$agents_file" "$fixture_dir/SKILL.no-resume-chec
   fail "task-scope matcher accepted pr-review-loop/SKILL.md without the resumed-turn scope check"
 else
   ok "task-scope matcher rejects pr-review-loop/SKILL.md without the resumed-turn scope check"
+fi
+if ! write_without_marker "$loop_skill_file" "$fixture_dir/SKILL.no-reuse-preflight.md" 'Before reusing an idle thread for a different item than its most recent assignment'; then
+  fail "could not create pr-review-loop/SKILL.md fixture without the reused-thread preflight"
+elif task_scope_policy_matches "$agents_file" "$fixture_dir/SKILL.no-reuse-preflight.md"; then
+  fail "task-scope matcher accepted pr-review-loop/SKILL.md without the reused-thread preflight"
+else
+  ok "task-scope matcher rejects pr-review-loop/SKILL.md without the reused-thread preflight"
 fi
 if ! write_without_marker "$loop_skill_file" "$fixture_dir/SKILL.no-check-diagnostics.md" 'inspect diagnostics for the exact PR head: read check-run annotations'; then
   fail "could not create pr-review-loop/SKILL.md fixture without the failed-check diagnostics marker"
